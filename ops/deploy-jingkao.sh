@@ -36,7 +36,11 @@ systemctl daemon-reload
 systemctl enable jingkao-api.service jingkao-backup.timer
 systemctl restart jingkao-api.service
 systemctl restart jingkao-backup.timer
-curl --fail --silent http://127.0.0.1:8000/api/health >/dev/null
+if ! curl --fail --silent http://127.0.0.1:8000/api/health >/dev/null; then
+  systemctl status jingkao-api.service --no-pager || true
+  journalctl -u jingkao-api.service -n 40 --no-pager || true
+  exit 1
+fi
 nginx -t
 systemctl reload nginx
 
