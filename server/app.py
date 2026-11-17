@@ -75,12 +75,12 @@ def initialize_database():
         username = os.environ.get("JINGKAO_ADMIN_USER")
         password = os.environ.get("JINGKAO_ADMIN_PASSWORD")
         if username and password:
-            existing = connection.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
-            if existing is None:
-                connection.execute(
-                    "INSERT INTO users(username, password_hash, created_at) VALUES (?, ?, ?)",
-                    (username, password_hash(password), now()),
-                )
+            encoded = password_hash(password)
+            connection.execute(
+                "INSERT INTO users(username, password_hash, created_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash",
+                (username, encoded, now()),
+            )
 
 
 def token_digest(token: str) -> str:
