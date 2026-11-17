@@ -49,5 +49,5 @@ jobs:
           SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" 'sudo install -o root -g root -m 755 /tmp/deploy-jingkao.sh /home/ubuntu/deploy-jingkao.sh && sudo -n /home/ubuntu/deploy-jingkao.sh'
+          ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" 'sed -i "s/\r$//" /tmp/deploy-jingkao.sh && sudo install -o root -g root -m 755 /tmp/deploy-jingkao.sh /home/ubuntu/deploy-jingkao.sh && sudo -n /home/ubuntu/deploy-jingkao.sh'
 
