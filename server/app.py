@@ -8,6 +8,7 @@ import sqlite3
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Optional
 
 DB_PATH = os.environ.get("JINGKAO_DB_PATH", "/var/lib/jingkao/jingkao.sqlite3")
 HOST = os.environ.get("JINGKAO_API_HOST", "127.0.0.1")
@@ -28,7 +29,7 @@ def db_connection():
     return connection
 
 
-def password_hash(password: str, salt: bytes | None = None) -> str:
+def password_hash(password: str, salt: Optional[bytes] = None) -> str:
     salt = salt or secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
     return f"pbkdf2_sha256$260000${salt.hex()}${digest.hex()}"
@@ -92,7 +93,7 @@ class ApiHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f"[{self.log_date_time_string()}] {format % args}")
 
-    def send_json(self, status: int, payload: dict, extra_headers: dict | None = None):
+    def send_json(self, status: int, payload: dict, extra_headers: Optional[dict] = None):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
