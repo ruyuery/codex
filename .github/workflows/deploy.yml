@@ -33,13 +33,13 @@ jobs:
           chmod 700 ~/.ssh
           ssh-keyscan -p "$SERVER_PORT" "$SERVER_HOST" >> ~/.ssh/known_hosts
 
-      - name: Upload site bundle
+      - name: Upload site and API bundle
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          tar -czf jingkao-site.tar.gz -C dist .
+          tar -czf jingkao-site.tar.gz dist server
           scp -P "$SERVER_PORT" jingkao-site.tar.gz "$SERVER_USER@$SERVER_HOST:/tmp/jingkao-site.tar.gz"
 
       - name: Activate release
@@ -49,3 +49,4 @@ jobs:
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
           ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" 'sudo -n /home/ubuntu/deploy-jingkao.sh'
+
