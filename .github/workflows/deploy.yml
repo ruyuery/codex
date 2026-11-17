@@ -41,6 +41,7 @@ jobs:
         run: |
           tar -czf jingkao-site.tar.gz dist server
           scp -P "$SERVER_PORT" jingkao-site.tar.gz "$SERVER_USER@$SERVER_HOST:/tmp/jingkao-site.tar.gz"
+          scp -P "$SERVER_PORT" ops/deploy-jingkao.sh "$SERVER_USER@$SERVER_HOST:/tmp/deploy-jingkao.sh"
 
       - name: Activate release
         env:
@@ -48,5 +49,5 @@ jobs:
           SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" 'sudo -n /home/ubuntu/deploy-jingkao.sh'
+          ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" 'sudo install -o root -g root -m 755 /tmp/deploy-jingkao.sh /home/ubuntu/deploy-jingkao.sh && sudo -n /home/ubuntu/deploy-jingkao.sh'
 
