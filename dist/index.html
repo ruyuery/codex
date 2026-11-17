@@ -53,6 +53,19 @@
     .day-row { display:grid; grid-template-columns:105px 1fr auto; gap:18px; align-items:center; padding:18px 4px; border-bottom:1px dashed var(--line); cursor:pointer; } .day-row:last-child { border-bottom:0; } .day-row:hover { background:#fffaf4; } .day-date { font-weight:800; } .day-date small { display:block; color:var(--muted); font-weight:500; margin-top:5px; } .day-focus { font-size:14px; font-weight:800; } .day-focus span { display:block; margin-top:5px; color:var(--muted); font-size:12px; font-weight:500; } .day-progress { display:flex; align-items:center; gap:9px; min-width:130px; } .mini-progress { height:7px; width:80px; background:#eee4da; border-radius:99px; overflow:hidden; } .mini-progress i { display:block; height:100%; background:var(--coral); }
     .analysis { display:grid; grid-template-columns:1fr 1fr; gap:15px; } .bar-row { display:grid; grid-template-columns:90px 1fr 38px; align-items:center; gap:10px; margin:15px 0; font-size:12px; } .bar { height:10px; background:#f0e7dd; border-radius:99px; overflow:hidden; } .bar i { display:block; height:100%; border-radius:99px; background:var(--coral); } .insight { background:#f8f0df; border:1px solid #ebddbd; padding:16px; border-radius:16px; line-height:1.7; font-size:13px; color:#745d3e; }
     .footer { margin-top:28px; text-align:center; color:#a49a91; font-size:12px; }
+    .auth-button { display:flex; align-items:center; gap:7px; }
+    .auth-dot { width:7px; height:7px; border-radius:50%; background:#d7b56d; display:inline-block; }
+    .auth-dot.online { background:#72b98a; }
+    .auth-modal { position:fixed; inset:0; z-index:20; display:none; place-items:center; padding:20px; background:rgba(36,50,58,.25); backdrop-filter:blur(7px); }
+    .auth-modal.open { display:grid; }
+    .auth-card { width:min(390px,100%); padding:25px; position:relative; }
+    .auth-card h2 { margin-bottom:7px; }
+    .auth-card p { color:var(--muted); font-size:13px; line-height:1.6; }
+    .auth-card label { display:block; margin-top:15px; color:#687575; font-size:12px; font-weight:700; }
+    .auth-card input { margin-top:7px; }
+    .auth-close { position:absolute; right:16px; top:13px; background:transparent; color:var(--muted); font-size:22px; }
+    .auth-message { min-height:19px; margin-top:10px; color:#c45d4a; font-size:12px; }
+    .auth-submit { width:100%; margin-top:8px; }
     @media (max-width:820px) { .hero, .split, .analysis { grid-template-columns:1fr; } .dashboard-grid { grid-template-columns:1fr 1fr; } .score-card { min-height:180px; } }
     @media (max-width:560px) { .shell { padding:17px 14px 36px; } .topbar { align-items:flex-start; } .top-actions { flex-direction:column; align-items:flex-end; gap:6px; } .hero-copy h2 { font-size:27px; } .hero-card { min-height:260px; padding:22px; } .sticker { right:22px; bottom:23px; } .dashboard-grid { grid-template-columns:1fr; } .day-row { grid-template-columns:75px 1fr; gap:10px; } .day-progress { grid-column:2; } .task { grid-template-columns:auto 1fr; } .task-duration { grid-column:2; width:max-content; } .tabs { width:100%; } .tab { flex:1; padding:10px 6px; } }
   </style>
@@ -61,7 +74,7 @@
   <main class="shell">
     <header class="topbar">
       <div class="brand"><div class="brand-mark">✦</div><div><div class="eyebrow">JINGKAO · STUDY JOURNAL</div><h1>京考手账</h1></div></div>
-      <div class="top-actions"><div class="date-chip" id="dateChip">2026 年 11 月 18 日 · 周三</div><button class="ghost-button" id="resetBtn">清空今日记录</button></div>
+      <div class="top-actions"><div class="date-chip" id="dateChip">2026 年 11 月 18 日 · 周三</div><button class="ghost-button auth-button" id="authBtn"><span class="auth-dot" id="authDot"></span><span id="authLabel">登录同步</span></button><button class="ghost-button" id="resetBtn">清空今日记录</button></div>
     </header>
 
     <section class="hero">
@@ -86,6 +99,7 @@
     <section class="view" id="reviewView"><div class="analysis"><div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>模块完成度</h2><p>根据你勾选的任务自动计算</p></div></div><div id="moduleBars"></div></div><div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>你的学习节奏</h2><p>每天记录后，这里会越来越准确</p></div></div><div class="insight" id="insightText">完成今天的第一项任务后，我会帮你生成更具体的复盘。</div><div style="margin-top:20px"><div class="stat-label">累计实际学习</div><div class="stat-value" id="reviewHours">0h</div></div><div style="margin-top:16px"><div class="stat-label">连续打卡</div><div class="stat-value" id="streak">0 天</div></div></div></div></section>
     <div class="footer">把计划写下来，把进步留下来 · 数据保存在当前浏览器</div>
   </main>
+  <div class="auth-modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle"><div class="paper auth-card"><button class="auth-close" id="authClose" aria-label="关闭">×</button><div class="eyebrow">SYNC YOUR JOURNAL</div><h2 id="authTitle">登录后同步到服务器</h2><p>登录后，任务、学习分钟和复盘会保存在你的服务器数据库中。</p><form id="authForm"><label for="usernameInput">用户名</label><input id="usernameInput" autocomplete="username" required /><label for="passwordInput">密码</label><input id="passwordInput" type="password" autocomplete="current-password" required /><div class="auth-message" id="authMessage"></div><button class="save-button auth-submit" type="submit" id="authSubmit">登录并同步</button></form></div></div>
   <script>
     const phases = [
       {focus:'资料分析基础 · 京考认知', tasks:[['资料分析：统计术语与表格阅读','刘文超 / 高照 · 观看基础课并整理 1 页笔记',90],['资料分析：现期与基期','高照 · 学会识别题干时间关系，练习 15 题',90],['判断推理：逻辑判断入门','阿里木江 · 了解翻译推理与直言命题',90],['申论：认识材料与找点','白鹭 · 完成 1 道归纳概括题',90],['常识时政：备考框架','小黑 / 璐璐 · 建立政治、法律、科技清单',75],['错题复盘与明日准备','整理错题 5 道，写下今天最不懂的 1 个点',75]]},
@@ -109,9 +123,49 @@
     ];
     const dates = Array.from({length:18},(_,i)=>{ const d=new Date(2026,10,18+i); return {iso:d.toISOString().slice(0,10), label:`${d.getMonth()+1}月${d.getDate()}日`, weekday:['日','一','二','三','四','五','六'][d.getDay()]}; });
     let data = JSON.parse(localStorage.getItem('jingkao-journal-v1') || '{}');
+    let serverUser = null;
+    let syncTimer = null;
     const key = (date, idx) => `${date}-${idx}`;
     const getCompleted = (date, idx) => !!data.tasks?.[key(date,idx)];
-    const save = () => localStorage.setItem('jingkao-journal-v1', JSON.stringify(data));
+    const save = () => { localStorage.setItem('jingkao-journal-v1', JSON.stringify(data)); queueSync(); };
+    function queueSync(){
+      if(!serverUser) return;
+      clearTimeout(syncTimer);
+      syncTimer=setTimeout(async()=>{
+        try{
+          const response=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data})});
+          if(response.ok) document.getElementById('saveHint').textContent='已同步到服务器';
+        }catch(error){ document.getElementById('saveHint').textContent='已保存到本机，服务器稍后同步'; }
+      },500);
+    }
+    async function hydrateFromServer(){
+      try{
+        const me=await fetch('/api/me');
+        if(!me.ok){ updateAuthUI(); return; }
+        const mePayload=await me.json(); serverUser=mePayload.user;
+        const stateResponse=await fetch('/api/state');
+        if(stateResponse.ok){ const remote=await stateResponse.json(); if(remote.state && Object.keys(remote.state).length){ data=remote.state; localStorage.setItem('jingkao-journal-v1',JSON.stringify(data)); } else { queueSync(); } }
+        updateAuthUI(); renderAll();
+      }catch(error){ updateAuthUI(); }
+    }
+    function updateAuthUI(){
+      document.getElementById('authLabel').textContent=serverUser?`${serverUser.username} · 已同步`:'登录同步';
+      document.getElementById('authDot').classList.toggle('online',!!serverUser);
+    }
+    function openAuth(){ document.getElementById('authModal').classList.add('open'); document.getElementById('authMessage').textContent=''; document.getElementById('usernameInput').focus(); }
+    function closeAuth(){ document.getElementById('authModal').classList.remove('open'); }
+    async function login(event){
+      event.preventDefault();
+      const submit=document.getElementById('authSubmit'); const message=document.getElementById('authMessage');
+      submit.disabled=true; submit.textContent='正在同步…'; message.textContent='';
+      try{
+        const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('usernameInput').value,password:document.getElementById('passwordInput').value})});
+        const payload=await response.json();
+        if(!response.ok) throw new Error(payload.error||'登录失败');
+        serverUser=payload.user; await hydrateFromServer(); closeAuth(); document.getElementById('saveHint').textContent='已同步到服务器';
+      }catch(error){ message.textContent=error.message; }
+      finally{ submit.disabled=false; submit.textContent='登录并同步'; }
+    }
     let selectedDay = 0;
     const activeDate = () => dates[selectedDay];
     function renderToday(){
@@ -131,7 +185,13 @@
     document.querySelectorAll('.mood').forEach(btn=>btn.onclick=()=>{ data.mood=data.mood||{}; data.mood[activeDate().iso]=btn.dataset.mood; save(); renderToday(); });
     document.getElementById('saveBtn').onclick=()=>{ const active=activeDate(); data.notes=data.notes||{}; data.notes[active.iso]=document.getElementById('noteInput').value; data.actual=data.actual||{}; data.actual[active.iso]=Math.max(0,Number(document.getElementById('minutesInput').value)||0); save(); document.getElementById('saveHint').textContent='刚刚保存 · 继续加油'; renderAll(); setTimeout(()=>document.getElementById('saveHint').textContent='自动保存在本机',1800); };
     document.getElementById('resetBtn').onclick=()=>{ const active=activeDate(); if(confirm('确定清空今天的完成记录和复盘吗？')){ phases[selectedDay].tasks.forEach((_,i)=>{ if(data.tasks) delete data.tasks[key(active.iso,i)] }); if(data.notes) delete data.notes[active.iso]; if(data.mood) delete data.mood[active.iso]; if(data.actual) delete data.actual[active.iso]; save(); renderAll(); } };
+    document.getElementById('authBtn').onclick=()=>{ if(serverUser){ fetch('/api/auth/logout',{method:'POST'}).finally(()=>{serverUser=null; updateAuthUI();}); } else openAuth(); };
+    document.getElementById('authClose').onclick=closeAuth;
+    document.getElementById('authModal').onclick=(event)=>{ if(event.target.id==='authModal') closeAuth(); };
+    document.getElementById('authForm').onsubmit=login;
+    updateAuthUI();
     renderAll();
+    hydrateFromServer();
   </script>
 </body>
 </html>
