@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up Jingkao SQLite database
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/sh -c 'mkdir -p /var/backups/jingkao && sqlite3 /var/lib/jingkao/jingkao.sqlite3 ".backup /tmp/jingkao-backup.sqlite3" && gzip -c /tmp/jingkao-backup.sqlite3 > /var/backups/jingkao/jingkao-$(date +%%F-%%H%%M%%S).sqlite3.gz && rm -f /tmp/jingkao-backup.sqlite3 && find /var/backups/jingkao -type f -name "*.gz" -mtime +30 -delete'
+
