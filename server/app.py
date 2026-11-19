@@ -8,6 +8,7 @@ import sqlite3
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Optional
 
 DB_PATH = os.environ.get("JINGKAO_DB_PATH", "/var/lib/jingkao/jingkao.sqlite3")
@@ -15,7 +16,9 @@ HOST = os.environ.get("JINGKAO_API_HOST", "127.0.0.1")
 PORT = int(os.environ.get("JINGKAO_API_PORT", "8000"))
 SESSION_DAYS = 30
 SESSION_SECONDS = SESSION_DAYS * 86400
-STATE_FIELDS = {"tasks", "topics", "planItems", "planOrder", "actual", "notes", "mood", "focusSessions"}
+SESSION_COOKIE = os.environ.get("JINGKAO_SESSION_COOKIE", "jingkao_session")
+APP_ENV = os.environ.get("JINGKAO_ENV", "production")
+STATE_FIELDS = {"tasks", "topics", "planItems", "planOrder", "actual", "notes", "mood", "focusSessions", "examAnswers"}
 
 
 def now() -> int:
@@ -48,6 +51,22 @@ def password_matches(password: str, encoded: str) -> bool:
         return False
 
 
+def seed_exam_catalog(connection):
+    path = Path(__file__).with_name("exam-papers.json")
+    for paper in json.loads(path.read_text(encoding="utf-8")):
+        connection.execute(
+            "INSERT OR IGNORE INTO exam_papers(id, year, subject, minutes, edition, source_url) "
+            "VALUES (:id, :year, :subject, :minutes, :edition, :source_url)", paper
+        )
+        for section, first, last, kind, *limit in paper["sections"]:
+            connection.executemany(
+                "INSERT OR IGNORE INTO exam_items(paper_id, number, section, kind, word_limit) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ((paper["id"], number, section, kind, limit[0] if limit else None)
+                 for number in range(first, last + 1)),
+            )
+
+
 def initialize_database():
     with db_connection() as connection:
         connection.executescript(
@@ -72,11 +91,28 @@ def initialize_database():
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
+            CREATE TABLE IF NOT EXISTS exam_papers (
+                id TEXT PRIMARY KEY,
+                year INTEGER NOT NULL,
+                subject TEXT NOT NULL,
+                minutes INTEGER NOT NULL,
+                edition TEXT NOT NULL,
+                source_url TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS exam_items (
+                paper_id TEXT NOT NULL REFERENCES exam_papers(id),
+                number INTEGER NOT NULL,
+                section TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK(kind IN ('single', 'multiple', 'text')),
+                word_limit INTEGER,
+                PRIMARY KEY (paper_id, number)
+            );
             """
         )
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
         if "remember" not in columns:
             connection.execute("ALTER TABLE sessions ADD COLUMN remember INTEGER NOT NULL DEFAULT 1")
+        seed_exam_catalog(connection)
         username = os.environ.get("JINGKAO_ADMIN_USER")
         password = os.environ.get("JINGKAO_ADMIN_PASSWORD")
         if username and password:
@@ -120,7 +156,7 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def cookie_token(self):
         cookies = http.cookies.SimpleCookie(self.headers.get("Cookie", ""))
-        morsel = cookies.get("jingkao_session")
+        morsel = cookies.get(SESSION_COOKIE)
         return morsel.value if morsel else None
 
     def authenticated_user(self):
@@ -143,7 +179,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         return user
 
     def session_cookie(self, token, max_age=None):
-        cookie = f"jingkao_session={token}; Path=/; HttpOnly; SameSite=Lax"
+        cookie = f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax"
         if max_age is not None:
             cookie += f"; Max-Age={max_age}"
         if self.headers.get("X-Forwarded-Proto") == "https":
@@ -153,6 +189,18 @@ class ApiHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/health":
             self.send_json(HTTPStatus.OK, {"ok": True})
+            return
+        if self.path == "/api/exams":
+            with db_connection() as connection:
+                papers = [dict(row) for row in connection.execute(
+                    "SELECT * FROM exam_papers ORDER BY year DESC, subject"
+                )]
+                for paper in papers:
+                    paper["items"] = [dict(row) for row in connection.execute(
+                        "SELECT number, section, kind, word_limit FROM exam_items "
+                        "WHERE paper_id = ? ORDER BY number", (paper["id"],)
+                    )]
+            self.send_json(HTTPStatus.OK, {"papers": papers, "environment": APP_ENV})
             return
         if self.path == "/api/me":
             user = self.authenticated_user()

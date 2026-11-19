@@ -1,0 +1,25 @@
+[Unit]
+Description=Jingkao staging API
+After=network.target
+
+[Service]
+User=jingkao-staging
+Group=jingkao-staging
+WorkingDirectory=/opt/jingkao-staging
+Environment=JINGKAO_DB_PATH=/var/lib/jingkao-staging/jingkao.sqlite3
+Environment=JINGKAO_API_PORT=18081
+Environment=JINGKAO_SESSION_COOKIE=jingkao_staging_session
+Environment=JINGKAO_ENV=staging
+EnvironmentFile=/etc/jingkao-staging.env
+ExecStart=/usr/bin/python3 /opt/jingkao-staging/app.py
+Restart=on-failure
+RestartSec=2
+StateDirectory=jingkao-staging
+StateDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

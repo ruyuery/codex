@@ -2,18 +2,19 @@ name: Deploy Jingkao Journal
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/staging]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: jingkao-production
-  cancel-in-progress: true
+  group: jingkao-deployment
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    if: github.ref_name == 'main' || github.ref_name == 'codex/staging'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,7 +34,24 @@ jobs:
           chmod 700 ~/.ssh
           ssh-keyscan -p "$SERVER_PORT" "$SERVER_HOST" >> ~/.ssh/known_hosts
 
-      - name: Upload site and API bundle
+      - name: Deploy and verify staging
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          set -euo pipefail
+          target="$SERVER_USER@$SERVER_HOST"
+          upload="$(ssh -p "$SERVER_PORT" "$target" 'mktemp -d /tmp/jingkao-stage-upload.XXXXXX')"
+          [[ "$upload" =~ ^/tmp/jingkao-stage-upload\.[a-zA-Z0-9]+$ ]]
+          trap 'ssh -p "$SERVER_PORT" "$target" "rm -f -- $upload/bundle.tar.gz $upload/deploy-staging.sh && rmdir -- $upload"' EXIT
+          tar -czf staging-bundle.tar.gz dist server ops/smoke-exams.py
+          scp -P "$SERVER_PORT" staging-bundle.tar.gz "$target:$upload/bundle.tar.gz"
+          scp -P "$SERVER_PORT" ops/deploy-staging.sh "$target:$upload/deploy-staging.sh"
+          ssh -p "$SERVER_PORT" "$target" "sed -i 's/\r$//' '$upload/deploy-staging.sh' && sudo -n bash '$upload/deploy-staging.sh' '$upload'"
+
+      - name: Upload production site and API bundle
+        if: github.ref_name == 'main'
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
@@ -43,11 +61,11 @@ jobs:
           scp -P "$SERVER_PORT" jingkao-site.tar.gz "$SERVER_USER@$SERVER_HOST:/tmp/jingkao-site.tar.gz"
           scp -P "$SERVER_PORT" ops/deploy-jingkao.sh "$SERVER_USER@$SERVER_HOST:/tmp/deploy-jingkao.sh"
 
-      - name: Activate release
+      - name: Activate production release
+        if: github.ref_name == 'main'
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
           ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" 'sed -i "s/\r$//" /tmp/deploy-jingkao.sh && sudo install -o root -g root -m 755 /tmp/deploy-jingkao.sh /home/ubuntu/deploy-jingkao.sh && sudo -n /home/ubuntu/deploy-jingkao.sh'
-

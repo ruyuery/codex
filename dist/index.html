@@ -118,6 +118,23 @@
     .unplanned-list time { white-space:nowrap; font-variant-numeric:tabular-nums; color:#435c52; }
     .date-dialog p { margin:12px 0 18px; line-height:1.55; }
     .plan-empty { padding:16px 4px; color:var(--muted); }
+    .main-nav { display:flex; gap:8px; margin:0 0 16px; }
+    .main-nav a { padding:9px 15px; border:1px solid var(--line); border-radius:14px; background:var(--paper); color:var(--ink); text-decoration:none; font-weight:700; }
+    .main-nav a[aria-current="page"] { background:var(--ink); color:white; border-color:var(--ink); }
+    .exam-heading p, .exam-meta, .exam-feedback { margin:9px 0; line-height:1.55; color:#576b62; }
+    .exam-selectors, .exam-source { display:flex; flex-wrap:wrap; gap:9px; margin:16px 0 12px; }
+    .exam-source a { color:#2d5846; font-weight:700; text-underline-offset:3px; }
+    .exam-section { margin:18px 0 0; }
+    .exam-items { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:9px; margin-top:10px; }
+    .exam-item { margin:0; min-width:0; padding:7px 10px 10px; border:1px solid var(--line); border-radius:12px; }
+    .exam-item legend { padding:0 4px; font-size:13px; }
+    .exam-choices { display:flex; gap:4px; }
+    .exam-choices button { flex:1; min-height:34px; border-radius:6px; background:#f3efe7; color:var(--ink); }
+    .exam-choices button[aria-pressed="true"] { background:#355e4d; color:white; }
+    .exam-text { display:block; margin-top:16px; }
+    .exam-text textarea { display:block; margin:6px 0; }
+    .exam-text button { margin-top:5px; }
+    .exam-stage { display:inline-block; padding:4px 9px; border-radius:8px; background:#f7e6ba; font-size:13px; }
     @media (max-width:560px) { .task-actions { grid-column:2; } .task-duration { width:auto; } .day-progress { justify-content:flex-start; } }
   </style>
 </head>
@@ -127,7 +144,12 @@
       <div class="brand"><div class="brand-mark">✦</div><div><div class="eyebrow">JINGKAO · STUDY JOURNAL</div><h1>京考手账</h1></div></div>
       <div class="top-actions"><div class="date-chip" id="dateChip"></div><button type="button" class="ghost-button auth-button" id="authBtn"><span class="auth-dot" id="authDot"></span><span id="authLabel">检查登录状态…</span></button><button type="button" class="ghost-button" id="resumeFocus" hidden>返回专注</button><button type="button" class="ghost-button" id="logoutBtn" hidden>退出登录</button></div>
     </header>
+    <nav class="main-nav" aria-label="应用导航">
+      <a href="#journal" id="journalMenu" aria-current="page">京考手账</a>
+      <a href="#exams" id="examMenu">历年真题</a>
+    </nav>
 
+    <div id="journalScreen">
     <section class="hero">
       <div class="paper hero-card"><div class="hero-copy"><div class="today-tag" id="dayTag">第 1 / 18 天 · 打好基础</div><h2 id="dayTitle">京考冲刺计划</h2></div></div>
       <div class="paper score-card"><div><div class="eyebrow">本周期完成度</div><div class="score-num" id="overallScore">0%</div></div><div><div class="progress"><i id="overallBar" style="width:0%"></i></div><p id="scoreNote">今天还没有打卡，先完成第一项吧。</p></div></div>
@@ -163,6 +185,18 @@
 
     <section class="view" id="reviewView"><div class="analysis"><div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>模块完成度</h2><p>根据你勾选的任务自动计算</p></div></div><div id="moduleBars"></div></div><div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>你的学习节奏</h2><p>每天记录后，这里会越来越准确</p></div></div><div class="insight" id="insightText">完成今天的第一项任务后，我会帮你生成更具体的复盘。</div><div style="margin-top:20px"><div class="stat-label">累计实际学习</div><div class="stat-value" id="reviewHours">0h</div></div><div style="margin-top:16px"><div class="stat-label">连续打卡</div><div class="stat-value" id="streak">0 天</div></div></div></div></section>
     <div class="footer">把计划写下来，把进步留下来 · 登录后同步到你的服务器</div>
+    </div>
+    <section class="paper card" id="examScreen" aria-labelledby="examTitle" hidden>
+      <div class="exam-heading">
+        <h2 id="examTitle">历年真题</h2>
+        <p id="examStage" class="exam-stage" hidden>测试环境</p>
+        <p>打开回忆版试卷，按题号在这里作答。</p>
+      </div>
+      <div id="examSelectors" class="exam-selectors" aria-label="选择试卷"></div>
+      <div id="examContent"></div>
+      <p id="examFeedback" class="exam-feedback" role="status"></p>
+      <button type="button" id="examRetry" class="ghost-button" hidden>重新加载</button>
+    </section>
   </main>
   <div class="auth-modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle"><div class="paper auth-card"><button class="auth-close" id="authClose" aria-label="关闭">×</button><div class="eyebrow">SYNC YOUR JOURNAL</div><h2 id="authTitle">登录后同步到服务器</h2><p>登录后，任务、学习分钟和复盘会保存在你的服务器数据库中。</p><form id="authForm"><label for="usernameInput">用户名</label><input id="usernameInput" autocomplete="username" required /><label for="passwordInput">密码</label><input id="passwordInput" type="password" autocomplete="current-password" required /><label class="remember"><input id="rememberInput" type="checkbox" checked>记住登录状态</label><div class="auth-message" id="authMessage" role="status"></div><button class="save-button auth-submit" type="submit" id="authSubmit">登录并同步</button></form></div></div>
   <dialog class="date-dialog" id="dateDialog" aria-labelledby="dateDialogTitle">
@@ -247,6 +281,6 @@
       {focus:'考前一天 · 轻装上阵', tasks:[['资料分析公式卡浏览','30 分钟，保持熟悉感',30],['言语判断方法卡浏览','30 分钟，只看自己的笔记',30],['申论模板与规范词浏览','45 分钟，不再背新范文',45],['常识时政最后浏览','45 分钟，看高频清单',45],['准备考试物品','准考证、身份证、黑色签字笔等',45],['提前休息与心理预演','写下考试顺序，22:30 前睡觉',45]]}
     ];
   </script>
-  <script src="journal.js?v=5"></script>
+  <script src="journal.js?v=6"></script>
 </body>
 </html>

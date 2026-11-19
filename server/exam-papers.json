@@ -1,0 +1,32 @@
+[
+  {
+    "id": "beijing-2022-xingce",
+    "year": 2022,
+    "subject": "行测",
+    "minutes": 120,
+    "edition": "考生回忆版",
+    "source_url": "https://www.aipta.com/article/1856.html",
+    "sections": [
+      ["常识判断", 1, 25, "single"],
+      ["常识判断", 26, 35, "multiple"],
+      ["言语理解与表达", 36, 70, "single"],
+      ["数量关系", 71, 85, "single"],
+      ["判断推理", 86, 115, "single"],
+      ["资料分析", 116, 135, "single"]
+    ]
+  },
+  {
+    "id": "beijing-2022-shenlun",
+    "year": 2022,
+    "subject": "申论",
+    "minutes": 150,
+    "edition": "考生回忆版",
+    "source_url": "https://www.aipta.com/article/1276.html",
+    "sections": [
+      ["归纳概括", 1, 1, "text", 300],
+      ["综合分析", 2, 2, "text", 250],
+      ["提出对策", 3, 3, "text", 400],
+      ["文章写作", 4, 4, "text", 1000]
+    ]
+  }
+]

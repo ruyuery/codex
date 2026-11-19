@@ -13,6 +13,7 @@ trap cleanup EXIT
 test -f "$bundle"
 test -f /etc/jingkao-api.env
 tar -xzf "$bundle" -C "$release_dir"
+test -f "$release_dir/server/exam-papers.json"
 
 if ! id jingkao >/dev/null 2>&1; then
   useradd --system --home /var/lib/jingkao --shell /usr/sbin/nologin jingkao
@@ -26,6 +27,7 @@ chown -R www-data:www-data "$web_root"
 install -d -o jingkao -g jingkao -m 0750 /var/lib/jingkao
 install -d -m 0755 /opt/jingkao-api
 install -o jingkao -g jingkao -m 0755 "$release_dir/server/app.py" /opt/jingkao-api/app.py
+install -o root -g root -m 0644 "$release_dir/server/exam-papers.json" /opt/jingkao-api/exam-papers.json
 install -o root -g root -m 0644 "$release_dir/server/jingkao-api.service" /etc/systemd/system/jingkao-api.service
 install -o root -g root -m 0644 "$release_dir/server/jingkao-backup.service" /etc/systemd/system/jingkao-backup.service
 install -o root -g root -m 0644 "$release_dir/server/jingkao-backup.timer" /etc/systemd/system/jingkao-backup.timer
@@ -51,4 +53,3 @@ if [ "$healthy" != "true" ]; then
 fi
 nginx -t
 systemctl reload nginx
-
