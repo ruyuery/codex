@@ -14,6 +14,8 @@ DB_PATH = os.environ.get("JINGKAO_DB_PATH", "/var/lib/jingkao/jingkao.sqlite3")
 HOST = os.environ.get("JINGKAO_API_HOST", "127.0.0.1")
 PORT = int(os.environ.get("JINGKAO_API_PORT", "8000"))
 SESSION_DAYS = 30
+SESSION_SECONDS = SESSION_DAYS * 86400
+STATE_FIELDS = {"tasks", "actual", "notes", "mood", "focusSessions"}
 
 
 def now() -> int:
@@ -72,6 +74,9 @@ def initialize_database():
             CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
             """
         )
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
+        if "remember" not in columns:
+            connection.execute("ALTER TABLE sessions ADD COLUMN remember INTEGER NOT NULL DEFAULT 1")
         username = os.environ.get("JINGKAO_ADMIN_USER")
         password = os.environ.get("JINGKAO_ADMIN_PASSWORD")
         if username and password:
@@ -137,13 +142,34 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "请先登录"})
         return user
 
+    def session_cookie(self, token, max_age=None):
+        cookie = f"jingkao_session={token}; Path=/; HttpOnly; SameSite=Lax"
+        if max_age is not None:
+            cookie += f"; Max-Age={max_age}"
+        if self.headers.get("X-Forwarded-Proto") == "https":
+            cookie += "; Secure"
+        return {"Set-Cookie": cookie}
+
     def do_GET(self):
         if self.path == "/api/health":
             self.send_json(HTTPStatus.OK, {"ok": True})
             return
         if self.path == "/api/me":
             user = self.authenticated_user()
-            self.send_json(HTTPStatus.OK if user else HTTPStatus.UNAUTHORIZED, {"user": user} if user else {"user": None})
+            headers = None
+            if user:
+                token = self.cookie_token()
+                timestamp = now()
+                with db_connection() as connection:
+                    renewed = connection.execute(
+                        "UPDATE sessions SET expires_at = ? WHERE token_hash = ? "
+                        "AND remember = 1 AND expires_at > ? AND expires_at <= ?",
+                        (timestamp + SESSION_SECONDS, token_digest(token),
+                         timestamp, timestamp + SESSION_SECONDS // 2),
+                    ).rowcount
+                if renewed:
+                    headers = self.session_cookie(token, SESSION_SECONDS)
+            self.send_json(HTTPStatus.OK if user else HTTPStatus.UNAUTHORIZED, {"user": user}, headers)
             return
         if self.path == "/api/state":
             user = self.require_user()
@@ -158,30 +184,35 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/api/auth/login":
-            payload = self.read_json() or {}
+            payload = self.read_json()
+            if not isinstance(payload, dict):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "无效的登录请求"})
+                return
             username = str(payload.get("username", "")).strip()
             password = str(payload.get("password", ""))
+            remember = payload.get("remember", True) is True
             with db_connection() as connection:
                 row = connection.execute("SELECT id, username, password_hash FROM users WHERE username = ?", (username,)).fetchone()
                 valid = bool(row and password_matches(password, row["password_hash"]))
                 if valid:
                     token = secrets.token_urlsafe(32)
                     connection.execute(
-                        "INSERT INTO sessions(token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
-                        (token_digest(token), row["id"], now() + SESSION_DAYS * 86400, now()),
+                        "INSERT INTO sessions(token_hash, user_id, expires_at, created_at, remember) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (token_digest(token), row["id"], now() + SESSION_SECONDS, now(), int(remember)),
                     )
             if not valid:
                 self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "用户名或密码不正确"})
                 return
-            cookie = f"jingkao_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_DAYS * 86400}"
-            self.send_json(HTTPStatus.OK, {"user": {"id": row["id"], "username": row["username"]}}, {"Set-Cookie": cookie})
+            headers = self.session_cookie(token, SESSION_SECONDS if remember else None)
+            self.send_json(HTTPStatus.OK, {"user": {"id": row["id"], "username": row["username"]}}, headers)
             return
         if self.path == "/api/auth/logout":
             token = self.cookie_token()
             if token:
                 with db_connection() as connection:
                     connection.execute("DELETE FROM sessions WHERE token_hash = ?", (token_digest(token),))
-            self.send_json(HTTPStatus.OK, {"ok": True}, {"Set-Cookie": "jingkao_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"})
+            self.send_json(HTTPStatus.OK, {"ok": True}, self.session_cookie("", 0))
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "未找到接口"})
 
@@ -192,23 +223,52 @@ class ApiHandler(BaseHTTPRequestHandler):
         user = self.require_user()
         if not user:
             return
-        payload = self.read_json() or {}
+        payload = self.read_json()
+        if not isinstance(payload, dict):
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": "无效的学习记录"})
+            return
+        changes = payload.get("changes")
         state = payload.get("state")
-        if not isinstance(state, dict):
+        if changes is not None:
+            if payload.get("user_id") != user["id"]:
+                self.send_json(HTTPStatus.CONFLICT, {"error": "登录账号已变更"})
+                return
+            if not isinstance(changes, dict) or any(
+                field not in STATE_FIELDS or not isinstance(entries, dict)
+                for field, entries in changes.items()
+            ):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "无效的学习记录"})
+                return
+        elif not isinstance(state, dict):
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": "state 必须是对象"})
             return
-        encoded = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+        timestamp = now()
         with db_connection() as connection:
+            if changes is not None:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT state_json FROM study_state WHERE user_id = ?", (user["id"],)
+                ).fetchone()
+                state = json.loads(row["state_json"]) if row else {}
+                for field, entries in changes.items():
+                    records = state.setdefault(field, {})
+                    if not isinstance(records, dict):
+                        records = state[field] = {}
+                    for key, value in entries.items():
+                        if value is None:
+                            records.pop(key, None)
+                        else:
+                            records[key] = value
+            encoded = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
             connection.execute(
                 "INSERT INTO study_state(user_id, state_json, updated_at) VALUES (?, ?, ?) "
                 "ON CONFLICT(user_id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at",
-                (user["id"], encoded, now()),
+                (user["id"], encoded, timestamp),
             )
-        self.send_json(HTTPStatus.OK, {"ok": True, "updated_at": now()})
+        self.send_json(HTTPStatus.OK, {"ok": True, "state": state, "updated_at": timestamp})
 
 
 if __name__ == "__main__":
     initialize_database()
     print(f"Jingkao API listening on {HOST}:{PORT}")
     ThreadingHTTPServer((HOST, PORT), ApiHandler).serve_forever()
-
