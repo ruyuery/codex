@@ -73,6 +73,10 @@
     .auth-card .remember { display:flex; align-items:center; gap:8px; }
     .remember input { width:auto; margin:0; accent-color:#bc5846; }
     .task-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .plan-edit { padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--paper); color:var(--ink); font-size:12px; }
+    .plan-edit:disabled { opacity:.45; }
+    .plan-edit.danger { color:#9a4842; }
+    .plan-edit-group { display:flex; gap:4px; }
     .focus-button { padding:8px 10px; border-radius:9px; background:#e4eee8; color:#2c5040; font-size:12px; font-weight:700; white-space:nowrap; }
     .task-title { display:flex; align-items:center; gap:4px; flex-wrap:wrap; min-width:0; font-weight:800; font-size:14px; }
     .task.done .task-name, .task.done .topic-select { color:#617063; }
@@ -81,21 +85,23 @@
     #topicForm label { display:block; font-size:14px; }
     #topicForm input { margin:6px 0 16px; }
     #topicForm .focus-actions { justify-content:flex-end; }
+    .editor-fields { display:grid; gap:12px; margin:15px 0; }
+    .editor-fields label { display:grid; gap:5px; font-size:14px; }
+    .editor-fields input[type="time"] { min-width:0; width:100%; font:inherit; border:1px solid var(--line); border-radius:10px; padding:10px; background:#fffdf9; }
+    .time-fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .timeline-item .timeline-time { text-align:left; margin-bottom:4px; }
     .split { margin-top:17px; }
     .day-row { text-align:left; width:100%; color:var(--ink); background:transparent; }
     .day-progress { justify-content:flex-end; }
     .focus-dialog, .date-dialog { border:0; border-radius:26px; padding:26px; width:min(420px,calc(100% - 28px)); color:var(--ink); background:var(--paper); box-shadow:var(--shadow); }
     .focus-dialog::backdrop { background:#172d2ce8; backdrop-filter:blur(12px); }
     .date-dialog::backdrop { background:#24323a66; }
-    .focus-dialog { text-align:center; background:#f4f8f4; }
-    .focus-dialog form { display:grid; gap:16px; }
+    .focus-dialog { box-sizing:border-box; width:60vw; max-width:60vw; height:60vh; height:60dvh; max-height:60dvh; padding:clamp(12px,3vw,40px); text-align:center; background:#f4f8f4; overflow:auto; }
+    .focus-dialog form { min-height:100%; display:grid; align-content:center; gap:clamp(8px,2vh,16px); }
     .focus-heading { color:#435c52; font-size:13px; font-weight:700; }
-    .focus-clock { font-size:clamp(46px,14vw,76px); font-weight:800; line-height:1.1; font-variant-numeric:tabular-nums; letter-spacing:-.06em; }
-    .focus-progress { width:100%; height:8px; accent-color:#4d7b66; }
+    .focus-clock { font-size:clamp(32px,12vw,96px); font-weight:800; line-height:1.1; font-variant-numeric:tabular-nums; letter-spacing:-.06em; }
     .focus-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
     .focus-dialog .save-button { background:#355e4d; }
-    .focus-duration { display:flex; justify-content:center; gap:8px; align-items:center; font-size:14px; }
-    .focus-duration input { width:85px; }
     .focus-status { min-height:1.3em; color:#435c52; font-size:13px; }
     .day-actions { display:flex; gap:9px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
     .focus-note { text-align:left; font-size:14px; }
@@ -128,18 +134,18 @@
     <section class="view active" id="todayView">
       <div class="paper card" id="outsidePlan" hidden>
         <p id="outsidePlanText"></p>
-        <div class="section-head"><h2>今天要做的事</h2><button type="button" class="focus-button" id="outsideFocus">无计划专注</button></div>
+        <div class="section-head"><h2>今天要做的事</h2><div class="day-actions"><button type="button" class="plan-edit" id="outsideAdd">添加计划</button><button type="button" class="focus-button" id="outsideFocus">无计划专注</button></div></div>
         <p id="outsideActual"></p>
       </div>
       <div id="dayContent">
-      <div class="dashboard-grid"><div class="paper stat"><div class="stat-label">今日任务</div><div class="stat-value" id="todayDone">0 / 6</div><div class="stat-note">完成一项，进度就会更新</div></div><div class="paper stat"><div class="stat-label">计划学习</div><div class="stat-value" id="plannedHours"></div><div class="stat-note">含 6 个学习时段</div></div><div class="paper stat"><div class="stat-label">实际学习</div><div class="stat-value" id="actualHours">0h</div><div class="stat-note">来自你的每日记录</div></div></div>
+      <div class="dashboard-grid"><div class="paper stat"><div class="stat-label">今日任务</div><div class="stat-value" id="todayDone">0 / 6</div><div class="stat-note">完成一项，进度就会更新</div></div><div class="paper stat"><div class="stat-label">计划学习</div><div class="stat-value" id="plannedHours"></div><div class="stat-note" id="plannedSlots"></div></div><div class="paper stat"><div class="stat-label">实际学习</div><div class="stat-value" id="actualHours">0h</div><div class="stat-note">来自你的每日记录</div></div></div>
       <div class="section-head">
         <h2 id="dayHeading">今天要做的事</h2>
-        <div class="day-actions"><span id="dayLabel"></span><button type="button" class="focus-button" id="unplannedFocus">无计划专注</button></div>
+        <div class="day-actions"><span id="dayLabel"></span><button type="button" class="plan-edit" id="addPlan">添加计划</button><button type="button" class="plan-edit" id="sortPlan" aria-pressed="false">排序与删除</button><button type="button" class="focus-button" id="unplannedFocus">无计划专注</button></div>
       </div>
       <div class="task-list" id="todayTasks"></div>
       <div class="split">
-        <div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>今日时间轴</h2><p>按当天学习任务顺序排列</p></div></div><div class="timeline" id="timeline"></div></div>
+        <div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>学习时间轴</h2><p>点击时间段可调整起止时间</p></div></div><div class="timeline" id="timeline"></div></div>
         <div class="paper card"><h2>今天的状态</h2><p style="color:var(--muted);font-size:13px;margin-top:6px">给自己一个真实的记录</p><div class="mood-grid" id="moodGrid"><button class="mood" data-mood="专注">🌿 专注</button><button class="mood" data-mood="平稳">☁️ 平稳</button><button class="mood" data-mood="疲惫">🌙 疲惫</button><button class="mood" data-mood="焦虑">🫧 焦虑</button></div><div style="margin-top:14px"><label class="stat-label" for="minutesInput">手动补记分钟（专注时间自动计入）</label><input id="minutesInput" type="number" min="0" max="1440" step="1" placeholder="例如 420" style="margin-top:7px" /></div><textarea id="noteInput" placeholder="今天学得怎么样？记一句就好……"></textarea><button class="ghost-button" id="resetBtn">清空当天记录</button><div class="save-row"><span role="status" class="saved-hint" id="saveHint">登录后同步服务器，未登录时保存本机</span><button class="save-button" id="saveBtn">保存今日复盘</button></div></div>
       </div>
       </div>
@@ -164,10 +170,28 @@
     <h2 id="topicDialogTitle">自定义考点</h2>
     <p id="topicTaskName"></p>
     <form id="topicForm">
-      <label for="topicInput">考点名称</label>
+      <label for="topicInput" id="topicInputLabel">考点名称</label>
       <input id="topicInput" type="text" maxlength="72" required>
       <div class="focus-actions">
         <button class="ghost-button" id="topicCancel" type="button">取消</button>
+        <button class="save-button" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog class="date-dialog" id="planDialog" aria-labelledby="planDialogTitle">
+    <h2 id="planDialogTitle">添加计划</h2>
+    <form id="planForm">
+      <div class="editor-fields">
+        <label id="planModuleLabel">模块<input type="text" id="planModule" maxlength="72" list="moduleOptions" required></label>
+        <datalist id="moduleOptions"></datalist>
+        <label id="planTopicLabel">考点（选填）<input type="text" id="planTopic" maxlength="72"></label>
+        <div class="time-fields">
+          <label>开始时间<input type="time" id="planStart" required></label>
+          <label>结束时间<input type="time" id="planEnd" required></label>
+        </div>
+      </div>
+      <div class="focus-actions">
+        <button class="ghost-button" id="planCancel" type="button">取消</button>
         <button class="save-button" type="submit">保存</button>
       </div>
     </form>
@@ -176,9 +200,7 @@
     <form id="focusForm">
       <div class="focus-heading">专注模式</div>
       <h2 id="focusTitle"></h2>
-      <label class="focus-duration" id="focusDurationLabel"><input id="focusMinutes" type="number" min="1" max="240" required>分钟</label>
-      <div class="focus-clock" id="focusClock" role="timer" aria-label="剩余专注时间">00:00</div>
-      <progress class="focus-progress" id="focusProgress" max="1" value="0" aria-label="专注进度"></progress>
+      <div class="focus-clock" id="focusClock" role="timer" aria-label="已专注时间">00:00</div>
       <label class="focus-note" id="focusNoteLabel" hidden>
         完成内容（选填）
         <textarea id="focusNote" rows="3" maxlength="500" placeholder="这段时间完成了什么？" disabled></textarea>
@@ -214,6 +236,6 @@
       {focus:'考前一天 · 轻装上阵', tasks:[['资料分析公式卡浏览','30 分钟，保持熟悉感',30],['言语判断方法卡浏览','30 分钟，只看自己的笔记',30],['申论模板与规范词浏览','45 分钟，不再背新范文',45],['常识时政最后浏览','45 分钟，看高频清单',45],['准备考试物品','准考证、身份证、黑色签字笔等',45],['提前休息与心理预演','写下考试顺序，22:30 前睡觉',45]]}
     ];
   </script>
-  <script src="journal.js?v=3"></script>
+  <script src="journal.js?v=4"></script>
 </body>
 </html>
