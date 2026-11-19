@@ -135,6 +135,37 @@
     .exam-text textarea { display:block; margin:6px 0; }
     .exam-text button { margin-top:5px; }
     .exam-stage { display:inline-block; padding:4px 9px; border-radius:8px; background:#f7e6ba; font-size:13px; }
+    .exam-toolbar, .exam-question-nav { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:16px 0; }
+    .exam-toolbar button, .exam-question-nav button { min-height:42px; }
+    .exam-workspace { max-width:880px; margin:auto; }
+    .exam-status-bar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin:15px 0; }
+    .exam-clock { background:#e5efe7; padding:7px 13px; color:#2c5040; border-radius:10px; font-size:23px; font-weight:800; font-variant-numeric:tabular-nums; }
+    .exam-clock.urgent { background:var(--coral-soft); color:#8b392b; }
+    .exam-sheet { padding:clamp(14px,4vw,28px); border:1px solid var(--line); border-radius:18px; background:#fffaf2; }
+    .exam-sheet h3 { font-size:clamp(17px,2.5vw,22px); line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; margin:7px 0 14px; }
+    .exam-material { white-space:pre-wrap; overflow-wrap:anywhere; padding:12px 14px; border-radius:10px; background:#f0ece3; margin:10px 0; line-height:1.65; }
+    .exam-figure { display:block; max-width:100%; max-height:350px; object-fit:contain; margin:9px 0; }
+    .exam-choice-list { display:grid; gap:8px; }
+    .exam-choice { display:flex; align-items:center; gap:10px; min-height:48px; width:100%; padding:8px 11px; text-align:left; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:12px; }
+    .exam-choice[aria-pressed="true"] { background:#e5efe7; border-color:#6e927e; }
+    .exam-choice span:last-child { overflow-wrap:anywhere; }
+    .exam-letter { flex:none; display:grid; place-items:center; width:27px; height:27px; border-radius:7px; background:#eee8df; font-weight:700; }
+    .exam-choice[aria-pressed="true"] .exam-letter { background:#355e4d; color:#fff; }
+    .exam-question-nav { justify-content:space-between; }
+    .exam-question-nav .save-button { margin-left:auto; }
+    .exam-question-nav button:disabled { opacity:.45; cursor:default; }
+    .exam-attempt-list { display:grid; gap:6px; margin:10px 0 0; }
+    .exam-attempt-list button { text-align:left; border-radius:10px; }
+    .exam-result-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(42px,1fr)); gap:6px; margin:10px 0 16px; }
+    .exam-result-grid button { min-height:42px; padding:4px; border-radius:8px; background:#ece6dc; color:#57483b; font-weight:700; }
+    .exam-result-grid button[data-status="correct"] { background:#dbece0; color:#24503b; }
+    .exam-result-grid button[data-status="wrong"] { background:#f7ddd5; color:#7d382a; }
+    .exam-result-grid button[aria-pressed="true"] { outline:2px solid currentColor; outline-offset:2px; }
+    .exam-review-options { padding-left:0; list-style:none; line-height:1.65; overflow-wrap:anywhere; }
+    .exam-analysis { line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .exam-score { font-size:clamp(22px,4vw,30px); }
+    .exam-upload { margin:12px 0; }
+    .exam-upload input { max-width:100%; display:block; margin-top:6px; }
     @media (max-width:560px) { .task-actions { grid-column:2; } .task-duration { width:auto; } .day-progress { justify-content:flex-start; } }
   </style>
 </head>
@@ -187,17 +218,72 @@
     <div class="footer">把计划写下来，把进步留下来 · 登录后同步到你的服务器</div>
     </div>
     <section class="paper card" id="examScreen" aria-labelledby="examTitle" hidden>
+      <div id="examLobby">
       <div class="exam-heading">
         <h2 id="examTitle">历年真题</h2>
         <p id="examStage" class="exam-stage" hidden>测试环境</p>
-        <p>打开回忆版试卷，按题号在这里作答。</p>
       </div>
       <div id="examSelectors" class="exam-selectors" aria-label="选择试卷"></div>
+      <div id="examControls" hidden>
+        <h3 id="examSelectedTitle"></h3>
+        <p class="exam-meta" id="examSelectedInfo"></p>
+        <div class="exam-toolbar">
+          <button type="button" class="save-button" id="examStart" hidden>开始答题</button>
+          <button type="button" class="ghost-button" id="examResume" hidden>继续答题</button>
+        </div>
+      </div>
       <div id="examContent"></div>
       <p id="examFeedback" class="exam-feedback" role="status"></p>
       <button type="button" id="examRetry" class="ghost-button" hidden>重新加载</button>
+      <section id="examHistory" hidden aria-labelledby="examHistoryTitle">
+        <h3 id="examHistoryTitle">最近交卷</h3>
+        <div class="exam-attempt-list" id="examHistoryList"></div>
+      </section>
+      <details class="exam-upload">
+        <summary>导入私人试卷</summary>
+        <p class="exam-meta">登录后可导入带题干、选项、答案和解析的 JSON 客观题试卷，仅当前账号可见。</p>
+        <div class="exam-toolbar">
+          <button type="button" class="ghost-button" id="examTemplate">下载试卷模板</button>
+          <label for="examUpload">选择 JSON 文件<input type="file" id="examUpload" accept=".json,application/json" /></label>
+        </div>
+        <p class="exam-feedback" id="examUploadStatus" role="status"></p>
+      </details>
+      </div>
+      <section class="exam-workspace" id="examWorkspace" hidden aria-labelledby="examWorkspaceTitle">
+        <div class="exam-status-bar">
+          <h2 id="examWorkspaceTitle"></h2>
+          <button type="button" class="ghost-button" id="examBack">返回试卷</button>
+        </div>
+        <div id="examWorking" hidden>
+          <div class="exam-status-bar">
+            <p class="exam-meta" id="examCount"></p>
+            <output class="exam-clock" id="examClock" aria-label="剩余时间" aria-live="off"></output>
+          </div>
+          <div class="exam-sheet" id="examQuestion"></div>
+          <div class="exam-question-nav">
+            <button type="button" class="ghost-button" id="examPrevious">上一题</button>
+            <button type="button" class="ghost-button" id="examNext">下一题</button>
+            <button type="button" class="save-button" id="examSubmit">交卷</button>
+          </div>
+        </div>
+        <div id="examResult" hidden>
+          <h3 class="exam-score" id="examScore"></h3>
+          <p class="exam-meta" id="examBreakdown"></p>
+          <p class="exam-meta">✓ 正确　× 错误　– 未答</p>
+          <div id="examResultGrid" class="exam-result-grid" role="group" aria-label="答题结果表"></div>
+          <div class="exam-sheet" id="examExplanation" hidden></div>
+        </div>
+      </section>
     </section>
   </main>
+  <dialog class="date-dialog" id="examConfirm" aria-labelledby="examConfirmTitle">
+    <h2 id="examConfirmTitle">确认交卷？</h2>
+    <p id="examConfirmMessage"></p>
+    <form method="dialog" class="exam-toolbar">
+      <button class="ghost-button" value="cancel">继续答题</button>
+      <button class="save-button" value="submit">确认交卷</button>
+    </form>
+  </dialog>
   <div class="auth-modal" id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle"><div class="paper auth-card"><button class="auth-close" id="authClose" aria-label="关闭">×</button><div class="eyebrow">SYNC YOUR JOURNAL</div><h2 id="authTitle">登录后同步到服务器</h2><p>登录后，任务、学习分钟和复盘会保存在你的服务器数据库中。</p><form id="authForm"><label for="usernameInput">用户名</label><input id="usernameInput" autocomplete="username" required /><label for="passwordInput">密码</label><input id="passwordInput" type="password" autocomplete="current-password" required /><label class="remember"><input id="rememberInput" type="checkbox" checked>记住登录状态</label><div class="auth-message" id="authMessage" role="status"></div><button class="save-button auth-submit" type="submit" id="authSubmit">登录并同步</button></form></div></div>
   <dialog class="date-dialog" id="dateDialog" aria-labelledby="dateDialogTitle">
     <h2 id="dateDialogTitle">还未到该日期</h2>
@@ -281,6 +367,7 @@
       {focus:'考前一天 · 轻装上阵', tasks:[['资料分析公式卡浏览','30 分钟，保持熟悉感',30],['言语判断方法卡浏览','30 分钟，只看自己的笔记',30],['申论模板与规范词浏览','45 分钟，不再背新范文',45],['常识时政最后浏览','45 分钟，看高频清单',45],['准备考试物品','准考证、身份证、黑色签字笔等',45],['提前休息与心理预演','写下考试顺序，22:30 前睡觉',45]]}
     ];
   </script>
-  <script src="journal.js?v=6"></script>
+  <script src="exam-mode.js?v=1"></script>
+  <script src="journal.js?v=7"></script>
 </body>
 </html>

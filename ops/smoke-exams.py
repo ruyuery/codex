@@ -21,12 +21,20 @@ def api(path, method="GET", data=None):
 
 
 assert 'id="examMenu"' in request("/")
-assert "function recordExamAnswer" in request("/journal.js?v=6")
+assert 'id="examStart"' in request("/")
+assert "function bindExamMode" in request("/exam-mode.js?v=1")
 catalog = api("exams")
 assert catalog["environment"] == "staging"
 papers = {paper["id"]: paper for paper in catalog["papers"]}
 assert len(papers["beijing-2022-xingce"]["items"]) == 135
 assert len(papers["beijing-2022-shenlun"]["items"]) == 4
+sample_id = "jingkao-original-mini-01"
+assert papers[sample_id]["ready"]
+questions = api("exams/" + sample_id + "/practice")["questions"]
+assert len(questions) == 8
+assert questions[4]["answer"] == "AC"
+assert all(question["stem"] and question["options"] and question["analysis"] for question in questions)
+assert "answer" not in papers[sample_id]["items"][0]
 
 credentials = dict(line.split("=", 1) for line in Path("/etc/jingkao-staging.env").read_text().splitlines() if line)
 account = api("auth/login", "POST", {
@@ -34,15 +42,24 @@ account = api("auth/login", "POST", {
     "password": credentials["JINGKAO_ADMIN_PASSWORD"],
 })["user"]
 keys = ["beijing-2022-xingce:26", "beijing-2022-shenlun:1"]
-before = api("state")["state"].get("examAnswers", {})
+before = api("state")["state"]
+changes = {
+    "examAnswers": dict(zip(keys, ["AC", "测试作答"])),
+    "examPrivatePapers": {"smoke-test-paper": {"id": "smoke-test-paper", "questions": questions[:1]}},
+    "examResults": {"smoke-test-result": {"paperId": sample_id, "scores": {"total": 8, "wrong": 1}}},
+}
 try:
-    changes = dict(zip(keys, ["AC", "测试作答"]))
-    api("state", "PUT", {"user_id": account["id"], "changes": {"examAnswers": changes}})
-    saved = api("state")["state"]["examAnswers"]
-    assert all(saved[key] == value for key, value in changes.items())
+    api("state", "PUT", {"user_id": account["id"], "changes": changes})
+    saved = api("state")["state"]
+    for field, entries in changes.items():
+        assert all(saved[field][key] == value for key, value in entries.items())
+    assert "smoke-test-paper" not in request("/api/exams")
 finally:
     api("state", "PUT", {
-        "user_id": account["id"], "changes": {"examAnswers": {key: before.get(key) for key in keys}}
+        "user_id": account["id"], "changes": {
+            field: {key: before.get(field, {}).get(key) for key in entries}
+            for field, entries in changes.items()
+        },
     })
     api("auth/logout", "POST")
-print("Staging passed: two papers, 139 item records, login, save and read both answer types.")
+print("Staging passed: legacy papers, practice questions, account-scoped imports and persisted scores.")

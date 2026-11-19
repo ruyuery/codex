@@ -57,7 +57,8 @@
     [/^上午/, ['test']],
     [/^(行测|补弱)/, ['test','words','logic','data','numbers']]
   ];
-  const fields = ['tasks', 'topics', 'planItems', 'planOrder', 'actual', 'notes', 'mood', 'focusSessions', 'examAnswers'];
+  const fields = ['tasks', 'topics', 'planItems', 'planOrder', 'actual', 'notes', 'mood', 'focusSessions',
+    'examAnswers', 'examPrivatePapers', 'examResults'];
   function localRead(key, fallback = {}) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
     catch { return fallback; }
@@ -606,15 +607,20 @@
   let examPapers = null;
   let activePaper = null;
   let examLoading = false;
+  let examSelectionKey = '';
+  const examMode = bindExamMode({
+    el, api, state: () => data, save, account: () => user, checking: () => checking,
+    selectPrivatePaper: refreshExamSelectors
+  });
 
   const answerKey = item => `${activePaper.id}:${item.number}`;
   function renderExamAnswers(resetDrafts = false) {
-    if (!activePaper) return;
+    if (!activePaper || !el('examProgress')) return;
     const answers = data.examAnswers ?? {};
     const count = activePaper.items.filter(item => answers[answerKey(item)]).length;
     el('examProgress').textContent = `已答 ${count} / ${activePaper.items.length} 题`;
     el('examContent').querySelectorAll('[data-letter]').forEach(button => {
-      const value = answers[button.dataset.answer] ?? '';
+      const value = String(answers[button.dataset.answer] ?? '');
       button.setAttribute('aria-pressed', value.includes(button.dataset.letter));
       button.disabled = checking;
     });
@@ -641,6 +647,12 @@
       button.setAttribute('aria-pressed', selected);
     });
     const content = el('examContent');
+    examMode.setSelection(paper);
+    el('examFeedback').textContent = '';
+    if (paper.ready || paper.questions) {
+      content.replaceChildren();
+      return;
+    }
     content.innerHTML = '<h3 id="examPaperName"></h3><p class="exam-meta" id="examPaperInfo"></p><p class="exam-source"><a id="examSource" target="_blank" rel="noopener noreferrer">打开试卷与参考解析入口 ↗</a></p><p id="examProgress" class="exam-meta"></p><label id="examSectionLabel" hidden>题型 <select class="topic-select" id="examSection"></select></label><div id="examQuestions"></div>';
     el('examPaperName').textContent = `${paper.year} 年北京公务员考试 · ${paper.subject}`;
     el('examPaperInfo').textContent = `${paper.edition} · ${paper.minutes} 分钟 · ${paper.items.length} 题`;
@@ -652,7 +664,6 @@
     picker.append(...Array.from(sections, section => new Option(section)));
     picker.onchange = () => renderExamSection(paper, picker.value);
     renderExamSection(paper, written ? null : picker.value);
-    el('examFeedback').textContent = '';
   }
   function renderExamSection(paper, section) {
     const root = el('examQuestions');
@@ -689,7 +700,7 @@
         button.dataset.letter = letter;
         button.dataset.answer = key;
         button.onclick = () => {
-          const current = data.examAnswers?.[key] ?? '';
+          const current = String(data.examAnswers?.[key] ?? '');
           const next = current.includes(letter) ? current.replace(letter, '') :
             item.kind === 'multiple' ? [...current, letter].sort().join('') : letter;
           void recordExamAnswer(key, next);
@@ -700,6 +711,26 @@
     }
     renderExamAnswers();
   }
+  function refreshExamSelectors(preferred) {
+    if (!examPapers) return;
+    const papers = [...examPapers, ...examMode.paperList()];
+    const key = papers.map(paper => paper.id).join('|');
+    if (!preferred && key === examSelectionKey) return;
+    examSelectionKey = key;
+    el('examSelectors').replaceChildren();
+    for (const paper of papers) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'filter';
+      button.dataset.paper = paper.id;
+      button.textContent = paper.title ?? (paper.year ? paper.year + ' · ' + paper.subject : '原创模拟 · 行测');
+      button.onclick = () => selectPaper(paper);
+      el('examSelectors').append(button);
+    }
+    const selection = papers.find(paper => paper.id === (preferred ?? activePaper?.id)) ??
+      papers.find(paper => paper.ready) ?? papers[0];
+    if (selection) selectPaper(selection);
+  }
   async function loadExamCatalog() {
     if (examPapers || examLoading) return;
     examLoading = true;
@@ -709,18 +740,8 @@
       const {papers, environment} = await api('exams');
       examPapers = papers;
       el('examStage').hidden = environment !== 'staging';
-      el('examSelectors').replaceChildren();
-      for (const paper of papers) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'filter';
-        button.dataset.paper = paper.id;
-        button.textContent = `${paper.year} · ${paper.subject}`;
-        button.onclick = () => selectPaper(paper);
-        el('examSelectors').append(button);
-      }
-      if (papers.length) selectPaper(papers.find(paper => paper.subject === '行测') ?? papers[0]);
-      else el('examFeedback').textContent = '暂无试卷。';
+      refreshExamSelectors();
+      if (!papers.length) el('examFeedback').textContent = '暂无试卷。';
     } catch {
       el('examFeedback').textContent = '试卷暂时无法加载。';
       el('examRetry').hidden = false;
@@ -740,6 +761,8 @@
   el('examRetry').onclick = loadExamCatalog;
 
   function render(resetForm = false) {
+    examMode.onState();
+    refreshExamSelectors();
     renderExamAnswers(resetForm);
     renderToday(resetForm);
     if (currentView === 'plan') renderPlan();

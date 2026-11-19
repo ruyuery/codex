@@ -18,7 +18,10 @@ SESSION_DAYS = 30
 SESSION_SECONDS = SESSION_DAYS * 86400
 SESSION_COOKIE = os.environ.get("JINGKAO_SESSION_COOKIE", "jingkao_session")
 APP_ENV = os.environ.get("JINGKAO_ENV", "production")
-STATE_FIELDS = {"tasks", "topics", "planItems", "planOrder", "actual", "notes", "mood", "focusSessions", "examAnswers"}
+STATE_FIELDS = {
+    "tasks", "topics", "planItems", "planOrder", "actual", "notes", "mood", "focusSessions",
+    "examAnswers", "examPrivatePapers", "examResults",
+}
 
 
 def now() -> int:
@@ -64,6 +67,14 @@ def seed_exam_catalog(connection):
                 "VALUES (?, ?, ?, ?, ?)",
                 ((paper["id"], number, section, kind, limit[0] if limit else None)
                  for number in range(first, last + 1)),
+            )
+        for number, question in enumerate(paper.get("questions", []), 1):
+            connection.execute(
+                "INSERT INTO exam_items(paper_id, number, section, kind, content_json) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(paper_id, number) DO UPDATE SET content_json = excluded.content_json, "
+                "section = excluded.section, kind = excluded.kind",
+                (paper["id"], number, question["section"], question.get("kind", "single"),
+                 json.dumps(question, ensure_ascii=False)),
             )
 
 
@@ -112,6 +123,9 @@ def initialize_database():
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
         if "remember" not in columns:
             connection.execute("ALTER TABLE sessions ADD COLUMN remember INTEGER NOT NULL DEFAULT 1")
+        exam_columns = {row["name"] for row in connection.execute("PRAGMA table_info(exam_items)")}
+        if "content_json" not in exam_columns:
+            connection.execute("ALTER TABLE exam_items ADD COLUMN content_json TEXT")
         seed_exam_catalog(connection)
         username = os.environ.get("JINGKAO_ADMIN_USER")
         password = os.environ.get("JINGKAO_ADMIN_PASSWORD")
@@ -197,10 +211,22 @@ class ApiHandler(BaseHTTPRequestHandler):
                 )]
                 for paper in papers:
                     paper["items"] = [dict(row) for row in connection.execute(
-                        "SELECT number, section, kind, word_limit FROM exam_items "
+                        "SELECT number, section, kind, word_limit, content_json IS NOT NULL AS has_content FROM exam_items "
                         "WHERE paper_id = ? ORDER BY number", (paper["id"],)
                     )]
+                    paper["ready"] = bool(paper["items"]) and all(item["has_content"] for item in paper["items"])
             self.send_json(HTTPStatus.OK, {"papers": papers, "environment": APP_ENV})
+            return
+        if self.path.startswith("/api/exams/") and self.path.endswith("/practice"):
+            paper_id = self.path[len("/api/exams/"):-len("/practice")]
+            with db_connection() as connection:
+                questions = [row["content_json"] for row in connection.execute(
+                    "SELECT content_json FROM exam_items WHERE paper_id = ? ORDER BY number", (paper_id,)
+                )]
+            if not questions or any(question is None for question in questions):
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "此试卷暂无完整的在线题目"})
+                return
+            self.send_json(HTTPStatus.OK, {"questions": [json.loads(question) for question in questions]})
             return
         if self.path == "/api/me":
             user = self.authenticated_user()

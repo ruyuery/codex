@@ -24,7 +24,7 @@ if [[ ! -f /etc/jingkao-staging.env ]]; then
 fi
 
 install -d -m 0755 /var/www/jingkao-staging /opt/jingkao-staging
-install -m 0644 "$release/dist/index.html" "$release/dist/journal.js" /var/www/jingkao-staging/
+install -m 0644 "$release/dist/index.html" "$release/dist/journal.js" "$release/dist/exam-mode.js" /var/www/jingkao-staging/
 install -m 0644 "$release/server/app.py" "$release/server/exam-papers.json" /opt/jingkao-staging/
 install -m 0644 "$release/server/jingkao-staging.service" /etc/systemd/system/
 install -m 0644 "$release/server/jingkao-staging-nginx.conf" /etc/nginx/sites-available/jingkao-staging
