@@ -43,7 +43,12 @@
   const secondsFor = (day, task) => Object.values(data.focusSessions ?? {})
     .filter(entry => entry?.day === day.iso && (task === undefined || task === entry.task))
     .reduce((sum, entry) => sum + (Number(entry.seconds) || 0), 0);
-  const actual = day => (Number(data.actual?.[day.key]) || 0) + Math.floor(secondsFor(day) / 60);
+  const actualSeconds = day => (Number(data.actual?.[day.key]) || 0) * 60 + secondsFor(day);
+  function studyDuration(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return remainder ? `${duration(minutes)} ${remainder} 秒` : duration(minutes);
+  }
 
   async function api(path, method = 'GET', body) {
     const options = {method, credentials: 'same-origin', cache: 'no-store'};
@@ -239,15 +244,21 @@
     const day = activeDay();
     el('dayContent').hidden = !day;
     el('outsidePlan').hidden = !!day;
-    el('outsidePlan').textContent = today < dates[0].iso ? `计划从 ${dates[0].label}开始。` : '18 天计划已结束，可在计划列表中查看以往记录。';
+    el('outsidePlanText').textContent = today < dates[0].iso ? `计划从 ${dates[0].label}开始。` : '18 天计划已结束，可在计划列表中查看以往记录。';
     el('dayTitle').textContent = day?.focus ?? '京考冲刺计划';
     el('dayTag').textContent = day ? `第 ${day.index + 1} / ${dates.length} 天` : '';
-    if (!day) return;
+    el('unplannedFocus').hidden = !!selected;
+    el('unplannedFocus').disabled = el('outsideFocus').disabled = checking;
+    renderUnplanned(day?.iso ?? today);
+    if (!day) {
+      el('outsideActual').textContent = `今日实际学习 ${studyDuration(secondsFor({iso:today}))}`;
+      return;
+    }
     el('dayHeading').textContent = selected ? '当天学习任务' : '今天要做的事';
     el('dayLabel').textContent = day.label;
     el('todayDone').textContent = `${day.tasks.filter((_, i) => completed(day, i)).length} / ${day.tasks.length}`;
     el('plannedHours').textContent = duration(day.tasks.reduce((sum, task) => sum + task[2], 0));
-    el('actualHours').textContent = duration(actual(day));
+    el('actualHours').textContent = studyDuration(actualSeconds(day));
     const list = el('todayTasks');
     list.replaceChildren();
     day.tasks.forEach(([title, description, minutes], i) => {
@@ -285,6 +296,23 @@
       button.disabled = checking;
     });
   }
+  function renderUnplanned(iso) {
+    const entries = Object.values(data.focusSessions ?? {})
+      .filter(entry => entry?.day === iso && entry.task === null);
+    el('unplannedCard').hidden = !entries.length;
+    const list = el('unplannedList');
+    list.replaceChildren();
+    for (const entry of entries.reverse()) {
+      const item = document.createElement('li');
+      const content = document.createElement('span');
+      content.textContent = entry.content || '无计划专注';
+      const time = document.createElement('time');
+      time.dateTime = `PT${entry.seconds}S`;
+      time.textContent = clock(entry.seconds);
+      item.append(content, time);
+      list.append(item);
+    }
+  }
   function renderPlan() {
     const query = el('planSearch').value.trim().toLowerCase();
     const filter = document.querySelector('.filter.active').dataset.filter;
@@ -315,16 +343,20 @@
   function renderSummary() {
     const counts = groups.map(() => [0, 0]);
     let streak = 0;
-    let minutes = 0;
+    let seconds = 0;
+    const planDates = new Set(dates.map(day => day.iso));
+    for (const entry of Object.values(data.focusSessions ?? {})) {
+      if (entry?.task === null && !planDates.has(entry.day)) seconds += Number(entry.seconds) || 0;
+    }
     for (const day of dates) {
-      const dailyMinutes = actual(day);
-      let tracked = dailyMinutes > 0 || !!data.notes?.[day.key];
+      const dailySeconds = actualSeconds(day);
+      let tracked = dailySeconds > 0 || !!data.notes?.[day.key];
       day.tasks.forEach(([title], i) => {
         const count = counts[groups.findIndex(([, pattern]) => pattern.test(title))];
         count[1]++;
         if (completed(day, i)) { count[0]++; tracked = true; }
       });
-      minutes += dailyMinutes;
+      seconds += dailySeconds;
       if (day.iso < today || (day.iso === today && tracked)) streak = tracked ? streak + 1 : 0;
     }
     const done = counts.reduce((sum, count) => sum + count[0], 0);
@@ -337,9 +369,9 @@
       const value = total ? Math.round(finished / total * 100) : 0;
       return `<div class="bar-row"><span>${groups[i][0]}</span><div class="bar"><i style="width:${value}%"></i></div><b>${value}%</b></div>`;
     }).join('');
-    el('reviewHours').textContent = duration(minutes);
+    el('reviewHours').textContent = studyDuration(seconds);
     el('streak').textContent = `${streak} 天`;
-    el('insightText').textContent = `已完成 ${done} 项任务，累计学习 ${duration(minutes)}。`;
+    el('insightText').textContent = `已完成 ${done} 项任务，累计学习 ${studyDuration(seconds)}。`;
   }
   function render(resetForm = false) {
     renderToday(resetForm);
@@ -352,26 +384,35 @@
   const timerForAccount = () => localRead(timerKey(), null);
   let focusTask = null;
   const remaining = timer => Math.max(0, timer.endsAt === null ? timer.remainingMs : timer.endsAt - Date.now());
+  const elapsed = timer => timer.elapsedMs + (timer.startedAt === null ? 0 : Math.max(0, Date.now() - timer.startedAt));
   function clock(seconds) {
     return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
   }
   function updateFocusEntry(timer = timerForAccount()) {
     el('resumeFocus').hidden = !timer || checking;
+    el('resumeFocus').textContent = timer?.finished ? '完成专注记录' : '返回专注';
   }
   function renderFocus(timer) {
-    const left = timer ? remaining(timer) : (Number(el('focusMinutes').value) || 0) * 60000;
-    el('focusClock').textContent = clock(Math.ceil(left / 1000));
-    el('focusProgress').value = timer ? 1 - left / timer.durationMs : 0;
-    el('focusDurationLabel').hidden = !!timer;
-    el('focusMinutes').disabled = !!timer;
-    el('focusFinish').hidden = !timer;
-    el('focusToggle').hidden = false;
-    el('focusToggle').textContent = !timer ? '开始专注' : timer.endsAt === null ? '继续' : '暂停';
+    const unplanned = (timer ?? focusTask)?.task === null;
+    const finished = !!timer?.finished;
+    const left = unplanned ? 0 : timer ? remaining(timer) : (Number(el('focusMinutes').value) || 0) * 60000;
+    const seconds = unplanned ? Math.floor((timer ? elapsed(timer) : 0) / 1000) : Math.ceil(left / 1000);
+    const paused = timer && (unplanned ? timer.startedAt === null : timer.endsAt === null);
+    el('focusClock').textContent = clock(seconds);
+    el('focusClock').setAttribute('aria-label', unplanned ? '已专注时间' : '剩余专注时间');
+    el('focusProgress').hidden = unplanned;
+    el('focusProgress').value = !unplanned && timer ? 1 - left / timer.durationMs : 0;
+    el('focusDurationLabel').hidden = el('focusMinutes').disabled = unplanned || !!timer;
+    el('focusFinish').hidden = !timer || finished;
+    el('focusToggle').hidden = finished;
+    el('focusToggle').textContent = !timer ? '开始专注' : paused ? '继续' : '暂停';
+    el('focusNoteLabel').hidden = el('focusNote').disabled = el('focusSave').hidden = !finished;
+    if (finished && el('focusNote').value !== (timer.content ?? '')) el('focusNote').value = timer.content ?? '';
   }
   function tickFocus() {
     if (checking) return;
     const timer = timerForAccount();
-    if (timer && remaining(timer) === 0) {
+    if (timer && timer.task !== null && remaining(timer) === 0) {
       finishFocus(timer);
       return;
     }
@@ -382,10 +423,13 @@
     const timer = timerForAccount();
     const anotherTask = timer && (timer.day !== day.iso || timer.task !== task);
     focusTask = timer ? {day: timer.day, task: timer.task} : {day: day.iso, task};
-    const [title,,minutes] = dates.find(date => date.iso === focusTask.day).tasks[focusTask.task];
+    const [title,,minutes] = focusTask.task === null
+      ? ['无计划专注', '', 0]
+      : dates.find(date => date.iso === focusTask.day).tasks[focusTask.task];
     el('focusTitle').textContent = title;
     el('focusMinutes').value = minutes;
-    el('focusStatus').textContent = anotherTask ? '已有专注计时，请先结束这次专注。' : '';
+    el('focusStatus').textContent = timer?.finished ? '本次计时已结束。'
+      : anotherTask ? '已有专注计时，请先结束这次专注。' : '';
     renderFocus(timer);
     el('focusDialog').showModal();
     tickFocus();
@@ -404,16 +448,53 @@
     el('focusFinish').hidden = true;
     if (el('focusDialog').open) el('focusClose').focus();
   }
+  function stopUnplanned(timer) {
+    timer.elapsedMs = elapsed(timer);
+    timer.startedAt = null;
+    timer.finished = true;
+    localWrite(timerKey(), timer);
+    updateFocusEntry(timer);
+    renderFocus(timer);
+    el('focusStatus').textContent = '本次计时已结束。';
+    el('focusNote').focus();
+  }
+  function saveUnplanned(timer) {
+    const seconds = Math.floor(timer.elapsedMs / 1000);
+    if (!data.focusSessions?.[timer.id]) {
+      void save({focusSessions: {[timer.id]: {
+        day: timer.day, task: null, seconds, content: el('focusNote').value.trim()
+      }}});
+    }
+    localWrite(timerKey(), null);
+    updateFocusEntry(null);
+    el('focusDialog').close();
+  }
   el('focusForm').onsubmit = event => {
     event.preventDefault();
-    if (el('focusToggle').hidden) return;
     let timer = timerForAccount();
+    if (timer?.finished) {
+      saveUnplanned(timer);
+      return;
+    }
+    if (el('focusToggle').hidden) return;
     if (!timer) {
-      const durationMs = Number(el('focusMinutes').value) * 60000;
       timer = {
-        ...focusTask, durationMs, remainingMs: durationMs, endsAt: Date.now() + durationMs,
+        ...focusTask,
         id: Array.from(crypto.getRandomValues(new Uint32Array(4)), value => value.toString(16).padStart(8, '0')).join('')
       };
+      if (timer.task === null) {
+        timer.elapsedMs = 0;
+        timer.startedAt = Date.now();
+      } else {
+        timer.durationMs = timer.remainingMs = Number(el('focusMinutes').value) * 60000;
+        timer.endsAt = Date.now() + timer.durationMs;
+      }
+    } else if (timer.task === null) {
+      if (timer.startedAt === null) timer.startedAt = Date.now();
+      else {
+        timer.elapsedMs = elapsed(timer);
+        timer.startedAt = null;
+      }
     } else if (timer.endsAt === null) {
       timer.endsAt = Date.now() + timer.remainingMs;
     } else {
@@ -421,16 +502,30 @@
       timer.endsAt = null;
     }
     localWrite(timerKey(), timer);
-    el('focusStatus').textContent = timer.endsAt === null ? '已暂停' : '专注中';
+    const paused = timer.task === null ? timer.startedAt === null : timer.endsAt === null;
+    el('focusStatus').textContent = paused ? '已暂停' : '专注中';
     renderFocus(timer);
     tickFocus();
   };
   el('focusMinutes').oninput = () => renderFocus(null);
-  el('focusFinish').onclick = () => { const timer = timerForAccount(); if (timer) finishFocus(timer); };
+  el('focusNote').oninput = event => {
+    const timer = timerForAccount();
+    if (timer?.finished) localWrite(timerKey(), {...timer, content: event.target.value});
+  };
+  el('focusFinish').onclick = () => {
+    const timer = timerForAccount();
+    if (!timer) return;
+    if (timer.task === null) stopUnplanned(timer);
+    else finishFocus(timer);
+  };
   el('focusClose').onclick = () => el('focusDialog').close();
   el('resumeFocus').onclick = () => {
     const timer = timerForAccount();
-    if (timer) openFocus(dates.find(day => day.iso === timer.day), timer.task);
+    if (timer) openFocus({iso:timer.day}, timer.task);
+  };
+  el('unplannedFocus').onclick = el('outsideFocus').onclick = () => {
+    refreshDate();
+    openFocus({iso:today}, null);
   };
 
   document.querySelectorAll('.tab').forEach(button => {
