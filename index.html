@@ -42,8 +42,8 @@
     .section-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:24px 2px 12px; } .section-head p { color:var(--muted); font-size:13px; }
     .task-list { display:grid; gap:10px; }
     .task { display:grid; grid-template-columns:auto 1fr auto; gap:13px; align-items:center; padding:16px 17px; border:1px solid var(--line); border-radius:18px; background:#fff; transition:transform .2s, box-shadow .2s; } .task:hover { transform:translateY(-1px); box-shadow:0 8px 20px rgba(100,75,57,.07); }
-    .check { width:24px; height:24px; border:2px solid #c9bdb0; border-radius:8px; background:#fff; display:grid; place-items:center; color:transparent; } .task.done .check { background:var(--coral); border-color:var(--coral); color:white; } .task.done .task-title { text-decoration:line-through; color:#9ba2a0; }
-    .task-title { font-weight:800; font-size:14px; } .task-meta { margin-top:5px; color:var(--muted); font-size:12px; } .task-duration { padding:7px 9px; background:#faf3ea; border-radius:9px; color:#92725e; font-size:12px; white-space:nowrap; }
+    .check { width:24px; height:24px; border:2px solid #c9bdb0; border-radius:8px; background:#fff; display:grid; place-items:center; color:transparent; } .task.done .check { background:var(--coral); border-color:var(--coral); color:white; }
+    .task-duration { padding:7px 9px; background:#faf3ea; border-radius:9px; color:#92725e; font-size:12px; white-space:nowrap; }
     .split { display:grid; grid-template-columns:1.3fr .7fr; gap:17px; } .card { padding:21px; }
     .timeline { display:grid; gap:11px; } .timeline-item { display:flex; gap:12px; align-items:flex-start; } .timeline-dot { margin-top:4px; width:10px; height:10px; border-radius:50%; background:var(--coral); box-shadow:0 0 0 4px var(--coral-soft); } .timeline-item strong { display:block; font-size:13px; } .timeline-item span { display:block; margin-top:4px; color:var(--muted); font-size:12px; }
     .mood-grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:13px; } .mood { padding:8px 11px; border:1px solid var(--line); border-radius:12px; background:#fff; } .mood.selected { background:var(--yellow); border-color:#edcf6c; }
@@ -74,7 +74,13 @@
     .remember input { width:auto; margin:0; accent-color:#bc5846; }
     .task-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .focus-button { padding:8px 10px; border-radius:9px; background:#e4eee8; color:#2c5040; font-size:12px; font-weight:700; white-space:nowrap; }
-    .task-meta { line-height:1.55; }
+    .task-title { display:flex; align-items:center; gap:4px; flex-wrap:wrap; min-width:0; font-weight:800; font-size:14px; }
+    .task.done .task-name, .task.done .topic-select { color:#617063; }
+    .topic-select { max-width:100%; min-width:0; font:inherit; color:inherit; border:1px solid #dbdcd2; border-radius:9px; padding:6px 8px; background:#fcfbf6; cursor:pointer; text-overflow:ellipsis; }
+    .topic-select:focus-visible { outline:2px solid #617e6e; outline-offset:2px; }
+    #topicForm label { display:block; font-size:14px; }
+    #topicForm input { margin:6px 0 16px; }
+    #topicForm .focus-actions { justify-content:flex-end; }
     .split { margin-top:17px; }
     .day-row { text-align:left; width:100%; color:var(--ink); background:transparent; }
     .day-progress { justify-content:flex-end; }
@@ -143,7 +149,7 @@
       </section>
     </section>
 
-    <section class="view" id="planView"><div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>18 天冲刺地图</h2><p>从零基础到整套模拟，按阶段推进</p></div><div class="eyebrow">18 DAYS</div></div><div class="plan-toolbar"><input id="planSearch" type="text" placeholder="搜索模块或老师" /><button class="filter active" data-filter="all">全部</button><button class="filter" data-filter="未完成">未完成</button><button class="filter" data-filter="已完成">已完成</button></div><div id="planList"></div></div></section>
+    <section class="view" id="planView"><div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>18 天冲刺地图</h2><p>从零基础到整套模拟，按阶段推进</p></div><div class="eyebrow">18 DAYS</div></div><div class="plan-toolbar"><input id="planSearch" type="text" placeholder="搜索模块或考点" /><button class="filter active" data-filter="all">全部</button><button class="filter" data-filter="未完成">未完成</button><button class="filter" data-filter="已完成">已完成</button></div><div id="planList"></div></div></section>
 
     <section class="view" id="reviewView"><div class="analysis"><div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>模块完成度</h2><p>根据你勾选的任务自动计算</p></div></div><div id="moduleBars"></div></div><div class="paper card"><div class="section-head" style="margin-top:0"><div><h2>你的学习节奏</h2><p>每天记录后，这里会越来越准确</p></div></div><div class="insight" id="insightText">完成今天的第一项任务后，我会帮你生成更具体的复盘。</div><div style="margin-top:20px"><div class="stat-label">累计实际学习</div><div class="stat-value" id="reviewHours">0h</div></div><div style="margin-top:16px"><div class="stat-label">连续打卡</div><div class="stat-value" id="streak">0 天</div></div></div></div></section>
     <div class="footer">把计划写下来，把进步留下来 · 登录后同步到你的服务器</div>
@@ -153,6 +159,18 @@
     <h2 id="dateDialogTitle">还未到该日期</h2>
     <p id="dateDialogMessage"></p>
     <form method="dialog"><button class="save-button">知道了</button></form>
+  </dialog>
+  <dialog class="date-dialog" id="topicDialog" aria-labelledby="topicDialogTitle">
+    <h2 id="topicDialogTitle">自定义考点</h2>
+    <p id="topicTaskName"></p>
+    <form id="topicForm">
+      <label for="topicInput">考点名称</label>
+      <input id="topicInput" type="text" maxlength="72" required>
+      <div class="focus-actions">
+        <button class="ghost-button" id="topicCancel" type="button">取消</button>
+        <button class="save-button" type="submit">保存</button>
+      </div>
+    </form>
   </dialog>
   <dialog class="focus-dialog" id="focusDialog" aria-labelledby="focusTitle">
     <form id="focusForm">
@@ -196,6 +214,6 @@
       {focus:'考前一天 · 轻装上阵', tasks:[['资料分析公式卡浏览','30 分钟，保持熟悉感',30],['言语判断方法卡浏览','30 分钟，只看自己的笔记',30],['申论模板与规范词浏览','45 分钟，不再背新范文',45],['常识时政最后浏览','45 分钟，看高频清单',45],['准备考试物品','准考证、身份证、黑色签字笔等',45],['提前休息与心理预演','写下考试顺序，22:30 前睡觉',45]]}
     ];
   </script>
-  <script src="journal.js?v=2"></script>
+  <script src="journal.js?v=3"></script>
 </body>
 </html>

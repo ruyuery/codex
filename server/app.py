@@ -15,7 +15,7 @@ HOST = os.environ.get("JINGKAO_API_HOST", "127.0.0.1")
 PORT = int(os.environ.get("JINGKAO_API_PORT", "8000"))
 SESSION_DAYS = 30
 SESSION_SECONDS = SESSION_DAYS * 86400
-STATE_FIELDS = {"tasks", "actual", "notes", "mood", "focusSessions"}
+STATE_FIELDS = {"tasks", "topics", "actual", "notes", "mood", "focusSessions"}
 
 
 def now() -> int:

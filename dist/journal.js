@@ -17,7 +17,44 @@
       key: new Date(date.getTime() - 86400000).toISOString().slice(0, 10)
     };
   });
-  const fields = ['tasks', 'actual', 'notes', 'mood', 'focusSessions'];
+  // Practice topics organized around the Beijing public-subject exam outline.
+  const examTopics = {
+    data: ['统计表与图形读数', '现期与基期', '同比与环比', '增长率与增长量', '比重与比重变化', '平均数及其变化', '倍数与百分点', '截位直除与估算', '综合判断'],
+    words: ['主旨概括', '细节理解', '词句理解', '隐含信息推断', '逻辑填空', '语句排序与衔接', '篇章阅读'],
+    numbers: ['数字推理', '工程问题', '行程问题', '利润与折扣', '排列组合与概率', '容斥原理', '几何计算', '比例与浓度'],
+    logic: ['图形推理', '演绎推理', '削弱与加强', '定义判断', '类比推理', '事件排序', '科学推理'],
+    shapes: ['位置变化', '样式规律', '数量规律', '属性规律', '立体图形与折纸盒'],
+    science: ['受力与运动', '浮力与压强', '光学与电路', '实验图表与变量控制'],
+    general: ['法律基础', '经济与民生', '历史文化', '科技与生活', '地理与生态'],
+    politics: ['党的创新理论', '中国式现代化', '高质量发展', '重要会议与政策', '时政专题'],
+    essay: ['材料阅读与找点', '归纳概括', '综合分析', '提出对策', '应用文写作', '文章审题立意', '分论点与论证'],
+    writing: ['审题与立意', '拟标题与列提纲', '开头与结尾', '分论点与论证', '完整文章限时写作'],
+    verbal: ['必要与充分条件', '削弱与加强', '前提假设', '结论推断', '真假推理'],
+    analogy: ['种属与组成', '并列与交叉', '功能与用途', '语义与语法关系'],
+    test: ['京考真题', '模拟套题', '模块限时训练', '作答顺序与时间分配'],
+    review: ['错题归因', '易错考点回顾', '错题二刷', '限时练习复盘', '下一阶段学习安排'],
+    examDay: ['准考证与证件', '文具与物品清单', '考点路线与到场时间', '考试日流程预演']
+  };
+  const topicRules = [
+    [/考试|考前|早睡/, ['examDay']],
+    [/^图形推理/, ['shapes']],
+    [/^科学推理/, ['science']],
+    [/^逻辑判断/, ['verbal']],
+    [/^类比推理/, ['analogy']],
+    [/^资料/, ['data']],
+    [/^数量/, ['numbers']],
+    [/^言语/, ['words']],
+    [/^判断与言语/, ['logic','words']],
+    [/^判断/, ['logic','science']],
+    [/大作文/, ['writing']],
+    [/^申论/, ['essay']],
+    [/^政治|^时政/, ['politics']],
+    [/^常识/, ['general','politics']],
+    [/^下午/, ['test','essay']],
+    [/^上午/, ['test']],
+    [/^(行测|补弱)/, ['test','words','logic','data','numbers']]
+  ];
+  const fields = ['tasks', 'topics', 'actual', 'notes', 'mood', 'focusSessions'];
   function localRead(key, fallback = {}) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
     catch { return fallback; }
@@ -38,6 +75,18 @@
   let editing = false;
   const activeDay = () => dates.find(day => day.iso === (selected ?? today));
   const taskKey = (day, index) => `${day.key}-${index}`;
+  function taskTopic(day, index) {
+    const [title] = day.tasks[index];
+    const colon = title.indexOf('：');
+    const module = colon < 0 ? title : title.slice(0, colon);
+    const original = colon < 0 ? '' : title.slice(colon + 1);
+    const topic = data.topics?.[taskKey(day, index)] ?? original;
+    return {module, original, topic};
+  }
+  function taskTitle(day, index) {
+    const {module, topic} = taskTopic(day, index);
+    return topic ? `${module}：${topic}` : module;
+  }
   const completed = (day, index) => !!data.tasks?.[taskKey(day, index)];
   const duration = minutes => `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
   const secondsFor = (day, task) => Object.values(data.focusSessions ?? {})
@@ -86,6 +135,7 @@
   }
   function clearSession() {
     el('focusDialog').close();
+    el('topicDialog').close();
     user = null;
     pending = {};
     data = localRead(guestKey);
@@ -137,6 +187,7 @@
     const result = await api('state');
     const cached = localRead(accountKey(account.id));
     el('focusDialog').close();
+    el('topicDialog').close();
     user = account;
     data = result.state ?? {};
     pending = cached.pending ?? {};
@@ -240,6 +291,58 @@
     openView('today', day.iso === today ? null : day.iso);
     el('todayView').scrollIntoView({block: 'start'});
   }
+  let editingTopic = null;
+  function saveTopic(day, index, value) {
+    const {original} = taskTopic(day, index);
+    return save({topics: {[taskKey(day, index)]: value === original ? null : value}});
+  }
+  function topicSelect(day, index) {
+    const {module, original, topic} = taskTopic(day, index);
+    const select = document.createElement('select');
+    select.className = 'topic-select';
+    select.id = `topic-${day.iso}-${index}`;
+    select.setAttribute('aria-label', `${module}考点`);
+    select.disabled = checking;
+    const groups = topicRules.find(([pattern]) => pattern.test(module))?.[1] ?? ['review'];
+    const choices = new Set([original, topic, ...groups.flatMap(group => examTopics[group])]);
+    for (const value of choices) select.add(new Option(value || '选择考点', value));
+    const custom = new Option('自定义…', '');
+    select.add(custom);
+    select.value = topic;
+    select.onchange = () => {
+      if (select.selectedOptions[0] === custom) {
+        select.value = topic;
+        editingTopic = {day, index, control: select.id};
+        el('topicTaskName').textContent = module;
+        el('topicInput').setCustomValidity('');
+        el('topicInput').value = topic;
+        el('topicDialog').showModal();
+        el('topicInput').select();
+      } else {
+        void saveTopic(day, index, select.value);
+        el(select.id)?.focus();
+      }
+    };
+    return select;
+  }
+  el('topicForm').onsubmit = event => {
+    event.preventDefault();
+    if (!editingTopic) return;
+    const input = el('topicInput');
+    const value = input.value.trim();
+    input.setCustomValidity(value ? '' : '请输入考点名称');
+    if (!input.reportValidity()) return;
+    const {day, index} = editingTopic;
+    void saveTopic(day, index, value);
+    el('topicDialog').close();
+  };
+  el('topicInput').oninput = event => event.target.setCustomValidity('');
+  el('topicCancel').onclick = () => el('topicDialog').close();
+  el('topicDialog').addEventListener('close', () => {
+    if (editingTopic) el(editingTopic.control)?.focus();
+    editingTopic = null;
+  });
+
   function renderToday(resetForm) {
     const day = activeDay();
     el('dayContent').hidden = !day;
@@ -261,14 +364,16 @@
     el('actualHours').textContent = studyDuration(actualSeconds(day));
     const list = el('todayTasks');
     list.replaceChildren();
-    day.tasks.forEach(([title, description, minutes], i) => {
+    day.tasks.forEach(([, , minutes], i) => {
       const row = document.createElement('div');
       const done = completed(day, i);
       const seconds = secondsFor(day, i);
       row.className = `task${done ? ' done' : ''}`;
       row.innerHTML = `<button class="check" aria-label="${done ? '取消完成' : '标记完成'}" aria-pressed="${done}">✓</button>
-        <div><div class="task-title">${title}</div><div class="task-meta">${description}${seconds ? ` · 已专注 ${clock(seconds)}` : ''}</div></div>
-        <div class="task-actions"><span class="task-duration">${minutes} 分钟</span><button class="focus-button">专注</button></div>`;
+        <div class="task-title"><span class="task-name"></span></div>
+        <div class="task-actions"><span class="task-duration">${minutes} 分钟</span><button class="focus-button">${seconds ? `已专注 ${clock(seconds)}` : '专注'}</button></div>`;
+      row.querySelector('.task-name').textContent = `${taskTopic(day, i).module}：`;
+      row.querySelector('.task-title').append(topicSelect(day, i));
       row.querySelector('.check').disabled = checking;
       row.querySelector('.focus-button').disabled = checking;
       row.querySelector('.check').onclick = () => save({tasks: {[taskKey(day, i)]: done ? null : true}});
@@ -278,11 +383,12 @@
     const starts = [540, 645, 810, 915, 1140, 1230];
     const time = minutes => `${String(Math.floor(minutes / 60)).padStart(2,'0')}:${String(minutes % 60).padStart(2,'0')}`;
     let end = 0;
-    el('timeline').innerHTML = day.tasks.map(([title,,minutes], i) => {
+    el('timeline').innerHTML = day.tasks.map(([, , minutes], i) => {
       const start = Math.max(starts[i], end + 15);
       end = start + minutes;
-      return `<div class="timeline-item"><i class="timeline-dot"></i><div><strong>${time(start)}–${time(end)} · ${minutes} 分钟</strong><span>${title}</span></div></div>`;
+      return `<div class="timeline-item"><i class="timeline-dot"></i><div><strong>${time(start)}–${time(end)} · ${minutes} 分钟</strong><span></span></div></div>`;
     }).join('');
+    el('timeline').querySelectorAll('span').forEach((label, i) => { label.textContent = taskTitle(day, i); });
     if (resetForm) editing = false;
     if (!editing) {
       el('minutesInput').value = data.actual?.[day.key] ?? '';
@@ -321,16 +427,18 @@
     for (const day of dates) {
       const done = day.tasks.filter((_, i) => completed(day, i)).length;
       const finished = done === day.tasks.length;
-      if (!(day.focus + day.tasks.flat().join(' ')).toLowerCase().includes(query)) continue;
+      const titles = day.tasks.map((_, i) => taskTitle(day, i));
+      if (!`${day.focus} ${titles.join(' ')}`.toLowerCase().includes(query)) continue;
       if (filter !== 'all' && (filter === '已完成') !== finished) continue;
       const button = document.createElement('button');
       button.className = 'day-row';
       button.type = 'button';
       const status = day.iso > today ? ' · 未开始' : day.iso === today ? ' · 今天' : '';
       button.innerHTML = `<span class="day-date">第 ${day.index + 1} 天<small>${day.label}</small></span>
-        <span class="day-focus">${day.focus}<span>${day.tasks.slice(0,3).map(task => task[0]).join(' · ')}</span></span>
+        <span class="day-focus">${day.focus}<span class="day-topics"></span></span>
         <span class="day-progress"><span class="mini-progress"><i style="width:${done / day.tasks.length * 100}%"></i></span><small>${done}/${day.tasks.length}${status}</small></span>`;
       button.onclick = () => openDay(day);
+      button.querySelector('.day-topics').textContent = titles.slice(0,3).join(' · ');
       list.append(button);
     }
     if (!list.childElementCount) list.innerHTML = '<p class="plan-empty">没有符合条件的计划。</p>';
@@ -423,11 +531,9 @@
     const timer = timerForAccount();
     const anotherTask = timer && (timer.day !== day.iso || timer.task !== task);
     focusTask = timer ? {day: timer.day, task: timer.task} : {day: day.iso, task};
-    const [title,,minutes] = focusTask.task === null
-      ? ['无计划专注', '', 0]
-      : dates.find(date => date.iso === focusTask.day).tasks[focusTask.task];
-    el('focusTitle').textContent = title;
-    el('focusMinutes').value = minutes;
+    const plannedDay = dates.find(date => date.iso === focusTask.day);
+    el('focusTitle').textContent = focusTask.task === null ? '无计划专注' : taskTitle(plannedDay, focusTask.task);
+    el('focusMinutes').value = focusTask.task === null ? 0 : plannedDay.tasks[focusTask.task][2];
     el('focusStatus').textContent = timer?.finished ? '本次计时已结束。'
       : anotherTask ? '已有专注计时，请先结束这次专注。' : '';
     renderFocus(timer);
