@@ -97,15 +97,19 @@
     .focus-dialog::backdrop { background:#172d2ce8; backdrop-filter:blur(12px); }
     .date-dialog::backdrop { background:#24323a66; }
     .focus-dialog { box-sizing:border-box; width:60vw; max-width:60vw; height:60vh; height:60dvh; max-height:60dvh; padding:clamp(12px,3vw,40px); text-align:center; background:#f4f8f4; overflow:auto; }
-    .focus-dialog form { min-height:100%; display:grid; align-content:center; gap:clamp(8px,2vh,16px); }
-    .focus-heading { color:#435c52; font-size:13px; font-weight:700; }
-    .focus-clock { font-size:clamp(32px,12vw,96px); font-weight:800; line-height:1.1; font-variant-numeric:tabular-nums; letter-spacing:-.06em; }
+    .focus-dialog form { min-height:100%; display:grid; align-content:center; gap:clamp(10px,2.5vh,24px); }
+    .focus-heading { color:#435c52; font-size:clamp(16px,1.6vw,24px); font-weight:700; }
+    .focus-dialog h2 { font-size:clamp(22px,3vw,42px); line-height:1.25; overflow-wrap:anywhere; }
+    .focus-clock { font-size:clamp(42px,14vw,132px); font-weight:800; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.06em; }
     .focus-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+    .focus-dialog .focus-actions button { min-height:44px; padding:9px clamp(10px,1.5vw,24px); font-size:clamp(16px,1.8vw,24px); }
     .focus-dialog .save-button { background:#355e4d; }
-    .focus-status { min-height:1.3em; color:#435c52; font-size:13px; }
+    .focus-status, .focus-confirm p { color:#435c52; font-size:clamp(16px,1.8vw,23px); line-height:1.4; }
+    .focus-status:empty { display:none; }
+    .focus-confirm p { margin-bottom:clamp(8px,2vh,16px); }
     .day-actions { display:flex; gap:9px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
-    .focus-note { text-align:left; font-size:14px; }
-    .focus-note textarea { min-height:82px; margin-top:7px; }
+    .focus-note { text-align:left; font-size:clamp(16px,1.6vw,22px); }
+    .focus-note textarea { min-height:82px; margin-top:7px; font:inherit; }
     .unplanned-card { margin-top:14px; }
     .unplanned-list { list-style:none; margin:10px 0 0; padding:0; }
     .unplanned-list li { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px; }
@@ -206,11 +210,18 @@
         <textarea id="focusNote" rows="3" maxlength="500" placeholder="这段时间完成了什么？" disabled></textarea>
       </label>
       <p class="focus-status" id="focusStatus" role="status"></p>
-      <div class="focus-actions">
+      <div class="focus-actions" id="focusControls">
         <button class="save-button" id="focusToggle" type="submit">开始专注</button>
         <button class="ghost-button" id="focusFinish" type="button" hidden>结束并记录</button>
         <button class="save-button" id="focusSave" type="submit" hidden>保存记录</button>
         <button class="ghost-button" id="focusClose" type="button">返回计划</button>
+      </div>
+      <div class="focus-confirm" id="focusPausePrompt" hidden>
+        <p id="focusPauseQuestion">确定暂停计时？</p>
+        <div class="focus-actions">
+          <button class="ghost-button" id="focusPauseCancel" type="button" aria-describedby="focusPauseQuestion">取消</button>
+          <button class="save-button" id="focusPauseConfirm" type="button">确认暂停</button>
+        </div>
       </div>
     </form>
   </dialog>
@@ -236,6 +247,6 @@
       {focus:'考前一天 · 轻装上阵', tasks:[['资料分析公式卡浏览','30 分钟，保持熟悉感',30],['言语判断方法卡浏览','30 分钟，只看自己的笔记',30],['申论模板与规范词浏览','45 分钟，不再背新范文',45],['常识时政最后浏览','45 分钟，看高频清单',45],['准备考试物品','准考证、身份证、黑色签字笔等',45],['提前休息与心理预演','写下考试顺序，22:30 前睡觉',45]]}
     ];
   </script>
-  <script src="journal.js?v=4"></script>
+  <script src="journal.js?v=5"></script>
 </body>
 </html>

@@ -623,6 +623,7 @@
     return migrated;
   }
   let focusTask = null;
+  let pauseRequest = null;
   const elapsed = timer => timer.elapsedMs + (timer.startedAt === null ? 0 : Math.max(0, Date.now() - timer.startedAt));
   function clock(seconds) {
     return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
@@ -635,7 +636,10 @@
     const finished = !!timer?.finished;
     const seconds = Math.floor((timer ? elapsed(timer) : 0) / 1000);
     const paused = timer?.startedAt === null;
+    const confirmingPause = !!timer && pauseRequest === timer.id && !paused && !finished;
     el('focusClock').textContent = clock(seconds);
+    el('focusControls').hidden = confirmingPause;
+    el('focusPausePrompt').hidden = !confirmingPause;
     el('focusFinish').hidden = !timer || finished;
     el('focusToggle').hidden = finished;
     el('focusToggle').textContent = !timer ? '开始专注' : paused ? '继续' : '暂停';
@@ -650,6 +654,7 @@
   }
   function openFocus(day, task) {
     const timer = timerForAccount();
+    pauseRequest = null;
     const anotherTask = timer && (timer.day !== day.iso || timer.task !== task);
     focusTask = timer ? {day: timer.day, task: timer.task} : {day: day.iso, task};
     const plannedDay = findDay(focusTask.day);
@@ -700,25 +705,43 @@
   }
   el('focusForm').onsubmit = event => {
     event.preventDefault();
-    let timer = timerForAccount();
+    const timer = timerForAccount();
     if (timer?.finished) {
       saveUnplanned(timer);
       return;
     }
     if (el('focusToggle').hidden) return;
-    if (!timer) {
-      timer = {...focusTask,id:newId(),elapsedMs:0,startedAt:Date.now()};
-    } else if (timer.startedAt === null) {
-      timer.startedAt = Date.now();
-    } else {
-      timer.elapsedMs = elapsed(timer);
-      timer.startedAt = null;
+    if (timer && timer.startedAt !== null) {
+      pauseRequest = timer.id;
+      renderFocus(timer);
+      el('focusPauseCancel').focus();
+      return;
     }
-    localWrite(timerKey(), timer);
-    el('focusStatus').textContent = timer.startedAt === null ? '已暂停' : '专注中';
-    renderFocus(timer);
+    const running = {...(timer ?? {...focusTask,id:newId(),elapsedMs:0}), startedAt:Date.now()};
+    localWrite(timerKey(), running);
+    el('focusStatus').textContent = '专注中';
+    renderFocus(running);
     tickFocus();
   };
+  function answerPause(confirmed) {
+    const timer = timerForAccount();
+    if (confirmed && timer && timer.id === pauseRequest && timer.startedAt !== null && !timer.finished) {
+      timer.elapsedMs = elapsed(timer);
+      timer.startedAt = null;
+      localWrite(timerKey(), timer);
+      el('focusStatus').textContent = '已暂停';
+    }
+    pauseRequest = null;
+    renderFocus(timer);
+    el(timer?.finished ? 'focusSave' : 'focusToggle').focus();
+  }
+  el('focusPauseCancel').onclick = () => answerPause(false);
+  el('focusPauseConfirm').onclick = () => answerPause(true);
+  el('focusDialog').addEventListener('cancel', event => {
+    if (el('focusPausePrompt').hidden) return;
+    event.preventDefault();
+    answerPause(false);
+  });
   el('focusNote').oninput = event => {
     const timer = timerForAccount();
     if (timer?.finished) localWrite(timerKey(), {...timer, content: event.target.value});
